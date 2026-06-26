@@ -11,7 +11,7 @@ struct BarLabel: View {
             }
         }
         .font(.system(size: 13, weight: .semibold))
-        .foregroundStyle(model.band?.tint ?? .primary)
+        .foregroundStyle(model.isStale ? Color.secondary : (model.band?.tint ?? .primary))
         .padding(.horizontal, 4)
     }
 }

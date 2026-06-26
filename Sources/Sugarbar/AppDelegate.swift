@@ -8,6 +8,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
         statusItemController = StatusItemController(model: model)
-        Task { await model.refresh() }
+        observeSleepWake()
+        model.start()
     }
+
+    private func observeSleepWake() {
+        let center = NSWorkspace.shared.notificationCenter
+        center.addObserver(self, selector: #selector(systemWillSleep),
+                           name: NSWorkspace.willSleepNotification, object: nil)
+        center.addObserver(self, selector: #selector(systemDidWake),
+                           name: NSWorkspace.didWakeNotification, object: nil)
+    }
+
+    @objc private func systemWillSleep() { model.pause() }
+    @objc private func systemDidWake() { model.resume() }
 }
