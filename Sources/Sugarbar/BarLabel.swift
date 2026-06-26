@@ -1,13 +1,12 @@
 import SwiftUI
 
 struct BarLabel: View {
+    let model: BarViewModel
+
     var body: some View {
-        HStack(spacing: 2) {
-            Text("5.3")
-            Image(systemName: "arrow.up.right")
-        }
-        .font(.system(size: 13, weight: .semibold))
-        .foregroundStyle(.green)
-        .padding(.horizontal, 4)
+        Text(model.displayValue)
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(.primary)
+            .padding(.horizontal, 4)
     }
 }

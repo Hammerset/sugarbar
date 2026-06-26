@@ -6,7 +6,7 @@ final class StatusItemController: NSObject {
     private let statusItem: NSStatusItem
     private let popover: NSPopover
 
-    override init() {
+    init(model: BarViewModel) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         popover = NSPopover()
         super.init()
@@ -15,7 +15,7 @@ final class StatusItemController: NSObject {
         popover.contentViewController = NSHostingController(rootView: PanelView())
 
         if let button = statusItem.button {
-            let label = ClickThroughHostingView(rootView: BarLabel())
+            let label = ClickThroughHostingView(rootView: BarLabel(model: model))
             label.translatesAutoresizingMaskIntoConstraints = false
             button.addSubview(label)
             NSLayoutConstraint.activate([
