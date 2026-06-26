@@ -17,3 +17,7 @@ private let mgPerDlPerMmolPerL = 18.0182
 public func mmolPerL(fromMgPerDl mgPerDl: Double) -> Double {
     mgPerDl / mgPerDlPerMmolPerL
 }
+
+public func formatMmolPerL(_ value: Double) -> String {
+    String(format: "%.1f", value)
+}

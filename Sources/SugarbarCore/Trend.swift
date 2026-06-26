@@ -16,4 +16,15 @@ public enum Trend: Equatable, Sendable {
         default: self = .notDetermined
         }
     }
+
+    public var symbolName: String? {
+        switch self {
+        case .notDetermined: nil
+        case .fallingQuickly: "arrow.down"
+        case .falling: "arrow.down.right"
+        case .stable: "arrow.right"
+        case .rising: "arrow.up.right"
+        case .risingQuickly: "arrow.up"
+        }
+    }
 }

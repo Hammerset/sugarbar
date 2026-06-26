@@ -21,7 +21,15 @@ final class BarViewModel {
 
     var displayValue: String {
         guard let latest else { return "—" }
-        return String(format: "%.1f", latest.value)
+        return formatMmolPerL(latest.value)
+    }
+
+    var band: Band? {
+        latest.map { Band(mmolPerL: $0.value) }
+    }
+
+    var trendSymbolName: String? {
+        latest?.trend.symbolName
     }
 
     func refresh() async {

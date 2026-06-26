@@ -4,9 +4,14 @@ struct BarLabel: View {
     let model: BarViewModel
 
     var body: some View {
-        Text(model.displayValue)
-            .font(.system(size: 13, weight: .semibold))
-            .foregroundStyle(.primary)
-            .padding(.horizontal, 4)
+        HStack(spacing: 2) {
+            Text(model.displayValue)
+            if let symbol = model.trendSymbolName {
+                Image(systemName: symbol)
+            }
+        }
+        .font(.system(size: 13, weight: .semibold))
+        .foregroundStyle(model.band?.tint ?? .primary)
+        .padding(.horizontal, 4)
     }
 }

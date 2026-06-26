@@ -23,6 +23,32 @@ import Testing
     func mapsApiTrendValue(apiValue: Int, expected: Trend) {
         #expect(Trend(apiValue: apiValue) == expected)
     }
+
+    @Test(arguments: [
+        (Trend.fallingQuickly, "arrow.down"),
+        (Trend.falling, "arrow.down.right"),
+        (Trend.stable, "arrow.right"),
+        (Trend.rising, "arrow.up.right"),
+        (Trend.risingQuickly, "arrow.up"),
+    ])
+    func mapsTrendToArrowSymbol(trend: Trend, expected: String) {
+        #expect(trend.symbolName == expected)
+    }
+
+    @Test func hasNoArrowWhenTrendNotDetermined() {
+        #expect(Trend.notDetermined.symbolName == nil)
+    }
+
+    @Test(arguments: [
+        (5.3, "5.3"),
+        (7.0, "7.0"),
+        (5.34, "5.3"),
+        (5.36, "5.4"),
+        (12.0, "12.0"),
+    ])
+    func formatsToOneDecimal(value: Double, expected: String) {
+        #expect(formatMmolPerL(value) == expected)
+    }
 }
 
 private extension Double {
