@@ -136,13 +136,16 @@ struct PanelView: View {
                 Text(reading.timestamp, format: .dateTime.hour().minute())
                     .font(.caption2)
                     .foregroundStyle(.secondary)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 1)
+                    .background(.background, in: RoundedRectangle(cornerRadius: 4))
             }
 
         PointMark(
             x: .value("Time", reading.timestamp),
             y: .value("mmol/L", reading.value)
         )
-        .foregroundStyle(valueTint)
+        .foregroundStyle(Band(mmolPerL: reading.value, thresholds: thresholds).tint)
         .symbolSize(80)
     }
 
