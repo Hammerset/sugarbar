@@ -37,6 +37,18 @@ import Testing
 
     @Test func hasNoArrowWhenTrendNotDetermined() {
         #expect(Trend.notDetermined.symbolName == nil)
+        #expect(Trend.notDetermined.arrowText == nil)
+    }
+
+    @Test(arguments: [
+        (Trend.fallingQuickly, "↓"),
+        (Trend.falling, "↘"),
+        (Trend.stable, "→"),
+        (Trend.rising, "↗"),
+        (Trend.risingQuickly, "↑"),
+    ])
+    func mapsTrendToArrowText(trend: Trend, expected: String) {
+        #expect(trend.arrowText == expected)
     }
 
     @Test(arguments: [

@@ -28,6 +28,11 @@ extension BarContent {
         return nil
     }
 
+    var trendArrowText: String? {
+        if case let .live(_, _, trend, _) = self { return trend.arrowText }
+        return nil
+    }
+
     /// Only a live reading is drawn in its band colour; everything else is greyed so a
     /// stale or absent value can never read as in-range.
     var tint: Color {
