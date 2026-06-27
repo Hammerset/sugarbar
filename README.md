@@ -4,7 +4,7 @@ A native macOS menu-bar app that shows your FreeStyle Libre 3 glucose — latest
 
 Reads from the unofficial **LibreLinkUp** API as a Follower. A LibreLinkUp account that receives a share from the phone running the Libre app is a prerequisite.
 
-> Not a medical device. For informational use only. See `PLAN.md` and `docs/adr/` for design decisions, `CONTEXT.md` for the domain language.
+> Not a medical device. For informational use only. See `CONTEXT.md` for the domain language; roadmap and design decisions live in [GitHub issues](https://github.com/Hammerset/sugarbar/issues) (decisions are labelled `decision`).
 
 ## Requirements
 
