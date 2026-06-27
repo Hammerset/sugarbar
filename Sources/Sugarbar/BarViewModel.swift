@@ -137,14 +137,10 @@ final class BarViewModel {
             history = snapshot.history
             statusMessage = nil
             return .success(readingAt: snapshot.latest.timestamp)
-        } catch LibreLinkUpError.rateLimited {
-            statusMessage = "Rate limited — backing off"
-            return .rateLimited
-        } catch LibreLinkUpError.termsNotAccepted {
-            statusMessage = "Open the LibreLinkUp app and re-accept the terms"
-            return .transientFailure
         } catch {
-            statusMessage = String(describing: error)
+            logDiagnostic("poll", error)
+            statusMessage = error.sugarbarMessage
+            if case LibreLinkUpError.rateLimited = error { return .rateLimited }
             return .transientFailure
         }
     }

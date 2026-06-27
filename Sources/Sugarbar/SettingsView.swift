@@ -196,7 +196,8 @@ struct SettingsView: View {
         do {
             _ = try await model.loadConnections()
         } catch {
-            connectionError = "Couldn't load connections — check your sign-in."
+            logDiagnostic("loadConnections", error)
+            connectionError = error.sugarbarMessage
         }
     }
 }
