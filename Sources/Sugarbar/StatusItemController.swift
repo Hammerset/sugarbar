@@ -6,13 +6,17 @@ final class StatusItemController: NSObject {
     private let statusItem: NSStatusItem
     private let popover: NSPopover
 
-    init(model: BarViewModel) {
+    init(model: BarViewModel, onOpenSettings: @escaping () -> Void) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         popover = NSPopover()
         super.init()
 
         popover.behavior = .transient
-        popover.contentViewController = NSHostingController(rootView: PanelView(model: model))
+        let panel = PanelView(model: model) { [weak self] in
+            self?.popover.performClose(nil)
+            onOpenSettings()
+        }
+        popover.contentViewController = NSHostingController(rootView: panel)
 
         if let button = statusItem.button {
             let label = ClickThroughHostingView(rootView: BarLabel(model: model))

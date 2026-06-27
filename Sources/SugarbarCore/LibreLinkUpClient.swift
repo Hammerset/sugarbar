@@ -16,10 +16,21 @@ public actor LibreLinkUpClient {
         try await fetchGraph(email: email, password: password).latest
     }
 
-    public func fetchGraph(email: String, password: String) async throws -> GraphSnapshot {
+    public func connections(email: String, password: String) async throws -> [Connection] {
+        let session = try await authenticate(email: email, password: password)
+        return try await fetchConnections(session)
+    }
+
+    public func fetchGraph(
+        email: String,
+        password: String,
+        preferredPatientId: String? = nil
+    ) async throws -> GraphSnapshot {
         let session = try await authenticate(email: email, password: password)
         let connections = try await fetchConnections(session)
-        guard let patient = connections.first else { throw LibreLinkUpError.noConnections }
+        guard let patient = selectedConnection(from: connections, preferredPatientId: preferredPatientId) else {
+            throw LibreLinkUpError.noConnections
+        }
         return try await fetchGraph(session, patientId: patient.patientId)
     }
 

@@ -4,9 +4,10 @@ import SugarbarCore
 
 struct PanelView: View {
     let model: BarViewModel
+    var onOpenSettings: () -> Void = {}
     @State private var window: HistoryWindow = .fourHours
 
-    private let thresholds = Thresholds.standard
+    private var thresholds: Thresholds { model.thresholds }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -108,9 +109,15 @@ struct PanelView: View {
     }
 
     private var footer: some View {
-        HStack {
-            Spacer()
-            Button("Quit") { NSApplication.shared.terminate(nil) }
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Not a medical device — for information only.")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+            HStack {
+                Button("Settings…", action: onOpenSettings)
+                Spacer()
+                Button("Quit") { NSApplication.shared.terminate(nil) }
+            }
         }
     }
 

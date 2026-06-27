@@ -12,6 +12,15 @@ public struct Thresholds: Equatable, Sendable {
     }
 
     public static let standard = Thresholds(urgentLow: 3.0, low: 3.9, high: 10.0, urgentHigh: 13.9)
+
+    public var isValid: Bool {
+        urgentLow < low && low < high && high < urgentHigh
+    }
+
+    public static func validated(urgentLow: Double, low: Double, high: Double, urgentHigh: Double) -> Thresholds? {
+        let thresholds = Thresholds(urgentLow: urgentLow, low: low, high: high, urgentHigh: urgentHigh)
+        return thresholds.isValid ? thresholds : nil
+    }
 }
 
 public enum Band: Equatable, Sendable {
