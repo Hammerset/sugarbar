@@ -33,13 +33,12 @@ struct PanelView: View {
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 2) {
-                if let timestamp = model.latest?.timestamp {
-                    HStack(spacing: 3) {
-                        Text(timestamp, style: .relative)
-                        Text("ago")
+                if let latest = model.latest {
+                    TimelineView(.periodic(from: .now, by: 1)) { context in
+                        Text(formatAge(latest.age(at: context.date)))
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
                     }
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
                 }
                 if let state = stateLine {
                     Text(state)
