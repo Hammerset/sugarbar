@@ -1,25 +1,33 @@
 import Foundation
 
 public struct GraphSnapshot: Equatable, Sendable {
-    public let latest: Reading
+    public let latest: Reading?
     public let history: [Reading]
+    public let sensorActivation: Date?
 
-    public init(latest: Reading, history: [Reading]) {
+    public init(latest: Reading?, history: [Reading], sensorActivation: Date? = nil) {
         self.latest = latest
         self.history = history
+        self.sensorActivation = sensorActivation
     }
 }
 
 private struct GraphEnvelope: Decodable {
-    let data: GraphData
+    let status: Int?
+    let data: GraphData?
 
     struct GraphData: Decodable {
-        let connection: ConnectionData
-        let graphData: [Measurement]
+        let connection: ConnectionData?
+        let graphData: [Measurement]?
     }
 
     struct ConnectionData: Decodable {
-        let glucoseMeasurement: Measurement
+        let glucoseMeasurement: Measurement?
+        let sensor: Sensor?
+    }
+
+    struct Sensor: Decodable {
+        let a: Double?
     }
 
     struct Measurement: Decodable {
@@ -48,15 +56,19 @@ private struct GraphEnvelope: Decodable {
 
 public func decodeGraph(_ data: Data) throws -> GraphSnapshot {
     let envelope = try JSONDecoder().decode(GraphEnvelope.self, from: data)
-    guard let latest = envelope.data.connection.glucoseMeasurement.reading() else {
-        throw LibreLinkUpError.unexpectedResponse
-    }
-    let history = envelope.data.graphData.compactMap { $0.reading() }
-    return GraphSnapshot(latest: latest, history: history)
+    if envelope.status == 4 { throw LibreLinkUpError.termsNotAccepted }
+    let connection = envelope.data?.connection
+    let latest = connection?.glucoseMeasurement?.reading()
+    let history = (envelope.data?.graphData ?? []).compactMap { $0.reading() }
+    let activation = connection?.sensor?.a.map { Date(timeIntervalSince1970: $0) }
+    return GraphSnapshot(latest: latest, history: history, sensorActivation: activation)
 }
 
 public func decodeLatestReading(_ data: Data) throws -> Reading {
-    try decodeGraph(data).latest
+    guard let latest = try decodeGraph(data).latest else {
+        throw LibreLinkUpError.unexpectedResponse
+    }
+    return latest
 }
 
 private let libreTimestampFormatter: DateFormatter = {

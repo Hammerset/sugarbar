@@ -65,8 +65,9 @@ private let graphJSON = """
         let client = LibreLinkUpClient(transport: transport)
         let snapshot = try await client.fetchGraph(email: "a@b.no", password: "pw")
 
-        #expect(abs(snapshot.latest.value - 5.55) < 0.01)
-        #expect(snapshot.latest.trend == .rising)
+        let latest = try #require(snapshot.latest)
+        #expect(abs(latest.value - 5.55) < 0.01)
+        #expect(latest.trend == .rising)
         #expect(snapshot.history.count == 2)
         #expect(snapshot.history[0].timestamp < snapshot.history[1].timestamp)
     }
@@ -107,6 +108,17 @@ private let graphJSON = """
 
         let client = LibreLinkUpClient(transport: transport)
         await #expect(throws: LibreLinkUpError.rateLimited) {
+            try await client.fetchLatestReading(email: "a@b.no", password: "pw")
+        }
+    }
+
+    @Test func mapsUnauthorizedToSessionExpired() async throws {
+        let transport = FakeTransport()
+        await transport.stub(host: "api-eu.libreview.io", path: "/llu/auth/login", json: loginSuccessJSON)
+        await transport.stub(host: "api-eu.libreview.io", path: "/llu/connections", status: 401, json: "{}")
+
+        let client = LibreLinkUpClient(transport: transport)
+        await #expect(throws: LibreLinkUpError.sessionExpired) {
             try await client.fetchLatestReading(email: "a@b.no", password: "pw")
         }
     }

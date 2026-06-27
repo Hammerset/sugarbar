@@ -13,7 +13,10 @@ public actor LibreLinkUpClient {
     }
 
     public func fetchLatestReading(email: String, password: String) async throws -> Reading {
-        try await fetchGraph(email: email, password: password).latest
+        guard let latest = try await fetchGraph(email: email, password: password).latest else {
+            throw LibreLinkUpError.unexpectedResponse
+        }
+        return latest
     }
 
     public func connections(email: String, password: String) async throws -> [Connection] {
@@ -79,6 +82,8 @@ public actor LibreLinkUpClient {
         switch response.status {
         case 200...299:
             return response
+        case 401:
+            throw LibreLinkUpError.sessionExpired
         case 429, 430:
             throw LibreLinkUpError.rateLimited
         default:

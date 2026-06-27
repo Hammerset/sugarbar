@@ -7,6 +7,7 @@ import SugarbarCore
 final class BarViewModel {
     private(set) var latest: Reading?
     private(set) var history: [Reading] = []
+    private(set) var sensorActivation: Date?
     private(set) var statusMessage: String?
     private(set) var now = Date()
     private(set) var settings: Settings
@@ -30,21 +31,13 @@ final class BarViewModel {
 
     var thresholds: Thresholds { settings.thresholds }
 
-    var displayValue: String {
-        guard let latest else { return "—" }
-        return formatMmolPerL(latest.value)
-    }
-
-    var band: Band? {
-        latest.map { Band(mmolPerL: $0.value, thresholds: settings.thresholds) }
-    }
-
-    var isStale: Bool {
-        latest?.isStale(at: now) ?? false
-    }
-
-    var trendSymbolName: String? {
-        isStale ? nil : latest?.trend.symbolName
+    var content: BarContent {
+        SugarbarCore.barContent(
+            latest: latest,
+            sensorActivation: sensorActivation,
+            now: now,
+            thresholds: settings.thresholds
+        )
     }
 
     var accountEmail: String? {
@@ -104,6 +97,7 @@ final class BarViewModel {
         try? credentialStore.clearToken()
         latest = nil
         history = []
+        sensorActivation = nil
         availableConnections = []
         statusMessage = "Open Settings to sign in"
     }
@@ -135,8 +129,9 @@ final class BarViewModel {
             )
             latest = snapshot.latest
             history = snapshot.history
+            sensorActivation = snapshot.sensorActivation
             statusMessage = nil
-            return .success(readingAt: snapshot.latest.timestamp)
+            return .success(readingAt: snapshot.latest?.timestamp ?? now)
         } catch {
             logDiagnostic("poll", error)
             statusMessage = error.sugarbarMessage

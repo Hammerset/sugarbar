@@ -89,13 +89,70 @@ import Testing
 
         let snapshot = try decodeGraph(json)
 
-        #expect(abs(snapshot.latest.value - 5.55) < 0.01)
+        let latest = try #require(snapshot.latest)
+        #expect(abs(latest.value - 5.55) < 0.01)
         #expect(snapshot.history.count == 2)
         #expect(snapshot.history[0].value.isApprox(5.0, tolerance: 0.01))
         #expect(snapshot.history[1].value.isApprox(9.99, tolerance: 0.01))
         // Historical points carry no trend arrow.
         #expect(snapshot.history.allSatisfy { $0.trend == .notDetermined })
         #expect(snapshot.history[0].timestamp < snapshot.history[1].timestamp)
+    }
+
+    @Test func decodesSensorActivationFromConnection() throws {
+        let json = Data("""
+        {
+          "status": 0,
+          "data": {
+            "connection": {
+              "sensor": { "sn": "abc", "a": 1719400000, "pt": 4 },
+              "glucoseMeasurement": {
+                "FactoryTimestamp": "6/26/2026 5:12:00 PM",
+                "ValueInMgPerDl": 100
+              }
+            },
+            "graphData": []
+          }
+        }
+        """.utf8)
+
+        let snapshot = try decodeGraph(json)
+        #expect(snapshot.sensorActivation == Date(timeIntervalSince1970: 1719400000))
+    }
+
+    @Test func toleratesMissingGlucoseMeasurementDuringWarmUp() throws {
+        let json = Data("""
+        {
+          "status": 0,
+          "data": {
+            "connection": {
+              "sensor": { "sn": "abc", "a": 1719400000 }
+            },
+            "graphData": [
+              { "FactoryTimestamp": "6/26/2026 4:12:00 PM", "ValueInMgPerDl": 110 }
+            ]
+          }
+        }
+        """.utf8)
+
+        let snapshot = try decodeGraph(json)
+        #expect(snapshot.latest == nil)
+        #expect(snapshot.history.count == 1)
+        #expect(snapshot.sensorActivation == Date(timeIntervalSince1970: 1719400000))
+    }
+
+    @Test func throwsTermsNotAcceptedWhenGraphReportsStatus4() {
+        let json = Data(#"{ "status": 4, "data": {} }"#.utf8)
+        #expect(throws: LibreLinkUpError.termsNotAccepted) {
+            try decodeGraph(json)
+        }
+    }
+
+    @Test func decodeLatestReadingThrowsWhenNoMeasurement() {
+        let json = Data(#"{ "status": 0, "data": { "connection": {}, "graphData": [] } }"#.utf8)
+        #expect(throws: LibreLinkUpError.unexpectedResponse) {
+            try decodeLatestReading(json)
+        }
     }
 
     @Test func skipsHistoryEntriesWithUnparseableTimestamp() throws {

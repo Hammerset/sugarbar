@@ -23,10 +23,8 @@ struct PanelView: View {
 
     private var header: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(model.displayValue)
-                .font(.system(size: 44, weight: .semibold, design: .rounded))
-                .foregroundStyle(valueTint)
-            if let symbol = model.trendSymbolName {
+            headerValue
+            if let symbol = model.content.trendSymbol {
                 Image(systemName: symbol)
                     .font(.system(size: 26, weight: .semibold))
                     .foregroundStyle(valueTint)
@@ -44,9 +42,22 @@ struct PanelView: View {
                 if let state = stateLine {
                     Text(state)
                         .font(.caption)
-                        .foregroundStyle(model.isStale ? .orange : .secondary)
+                        .foregroundStyle(stateIsWarning ? .orange : .secondary)
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private var headerValue: some View {
+        if let text = model.content.text {
+            Text(text)
+                .font(.system(size: 44, weight: .semibold, design: .rounded))
+                .foregroundStyle(valueTint)
+        } else if let glyph = model.content.glyph {
+            Image(systemName: glyph)
+                .font(.system(size: 34, weight: .semibold))
+                .foregroundStyle(valueTint)
         }
     }
 
@@ -121,16 +132,31 @@ struct PanelView: View {
         }
     }
 
-    private var valueTint: Color {
-        guard !model.isStale, let band = model.band else { return .secondary }
-        return band.tint
+    private var valueTint: Color { model.content.tint }
+
+    private var stateIsWarning: Bool {
+        if model.statusMessage != nil { return true }
+        if case .stale = model.content { return true }
+        return false
     }
 
     private var stateLine: String? {
         if let message = model.statusMessage { return message }
-        if model.latest == nil { return "Waiting for data" }
-        if model.isStale { return "No Recent Data" }
-        return nil
+        switch model.content {
+        case let .warmingUp(remaining):
+            let minutes = max(1, Int(ceil(remaining / 60)))
+            return "Sensor warming up — ready in \(minutes) min"
+        case .stale:
+            return "No Recent Data"
+        case .empty:
+            return "Waiting for data"
+        case let .live(_, _, _, outOfRange):
+            switch outOfRange {
+            case .low: return "Below sensor range"
+            case .high: return "Above sensor range"
+            case nil: return nil
+            }
+        }
     }
 
     private var thresholdLines: [(value: Double, color: Color)] {
