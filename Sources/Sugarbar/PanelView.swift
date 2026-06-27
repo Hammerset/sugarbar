@@ -6,6 +6,7 @@ struct PanelView: View {
     let model: BarViewModel
     var onOpenSettings: () -> Void = {}
     @State private var window: HistoryWindow = .fourHours
+    @State private var selectedDate: Date?
 
     private var thresholds: Thresholds { model.thresholds }
 
@@ -103,11 +104,46 @@ struct PanelView: View {
                     )
                     .foregroundStyle(valueTint)
                 }
+
+                if let selected = nearestReading(to: selectedDate, in: series) {
+                    selectionMarks(for: selected)
+                }
             }
+            .chartXSelection(value: $selectedDate)
             .chartXScale(domain: xDomain)
             .chartYScale(domain: yDomain(for: series))
             .frame(height: 180)
         }
+    }
+
+    private func nearestReading(to date: Date?, in series: [Reading]) -> Reading? {
+        guard let date else { return nil }
+        return SugarbarCore.nearestReading(to: date, in: series)
+    }
+
+    @ChartContentBuilder
+    private func selectionMarks(for reading: Reading) -> some ChartContent {
+        RuleMark(x: .value("Time", reading.timestamp))
+            .lineStyle(StrokeStyle(lineWidth: 1))
+            .foregroundStyle(.secondary.opacity(0.5))
+            .annotation(position: .top, spacing: 4, overflowResolution: .init(x: .fit(to: .chart), y: .disabled)) {
+                Text("\(formatMmolPerL(reading.value)) mmol/L")
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.primary)
+            }
+            .annotation(position: .bottom, spacing: 4, overflowResolution: .init(x: .fit(to: .chart), y: .disabled)) {
+                Text(reading.timestamp, format: .dateTime.hour().minute())
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+        PointMark(
+            x: .value("Time", reading.timestamp),
+            y: .value("mmol/L", reading.value)
+        )
+        .foregroundStyle(valueTint)
+        .symbolSize(80)
     }
 
     private var rangePicker: some View {
