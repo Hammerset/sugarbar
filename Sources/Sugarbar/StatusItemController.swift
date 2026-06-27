@@ -28,6 +28,12 @@ final class StatusItemController: NSObject {
                 label.topAnchor.constraint(equalTo: button.topAnchor),
                 label.bottomAnchor.constraint(equalTo: button.bottomAnchor),
             ])
+            // A variable-length item won't grow the button to a SwiftUI subview's
+            // content, so a value wider than the launch width ("—") overlaps itself.
+            // Drive the item's length from the label's own width instead.
+            label.onWidthChange = { [weak statusItem] width in
+                statusItem?.length = width
+            }
             button.target = self
             button.action = #selector(togglePopover)
         }
@@ -46,9 +52,15 @@ final class StatusItemController: NSObject {
 
 /// Declines hit-testing so clicks fall through to the status-item button, whose
 /// action toggles the popover. Without this the hosting view swallows the click.
+/// Also reports its content width so the controller can size the status item, since
+/// a variable-length item doesn't track a SwiftUI subview's intrinsic size.
 private final class ClickThroughHostingView: NSHostingView<BarLabel> {
+    var onWidthChange: ((CGFloat) -> Void)?
+    private var lastWidth: CGFloat = -1
+
     required init(rootView: BarLabel) {
         super.init(rootView: rootView)
+        sizingOptions = [.intrinsicContentSize]
     }
 
     @available(*, unavailable)
@@ -58,5 +70,13 @@ private final class ClickThroughHostingView: NSHostingView<BarLabel> {
 
     override func hitTest(_ point: NSPoint) -> NSView? {
         nil
+    }
+
+    override func layout() {
+        super.layout()
+        let width = intrinsicContentSize.width
+        guard width > 0, abs(width - lastWidth) > 0.5 else { return }
+        lastWidth = width
+        onWidthChange?(width)
     }
 }

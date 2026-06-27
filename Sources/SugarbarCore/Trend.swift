@@ -27,4 +27,15 @@ public enum Trend: Equatable, Sendable {
         case .risingQuickly: "arrow.up"
         }
     }
+
+    public var arrowText: String? {
+        switch self {
+        case .notDetermined: nil
+        case .fallingQuickly: "↓"
+        case .falling: "↘"
+        case .stable: "→"
+        case .rising: "↗"
+        case .risingQuickly: "↑"
+        }
+    }
 }

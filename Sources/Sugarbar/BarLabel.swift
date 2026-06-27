@@ -12,8 +12,8 @@ struct BarLabel: View {
             if let glyph = content.glyph {
                 Image(systemName: glyph)
             }
-            if let symbol = content.trendSymbol {
-                Image(systemName: symbol)
+            if let arrow = content.trendArrowText {
+                Text(arrow)
             }
         }
         .font(.system(size: 13, weight: .semibold))

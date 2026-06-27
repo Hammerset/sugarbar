@@ -23,11 +23,13 @@ struct PanelView: View {
 
     private var header: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
-            headerValue
-            if let symbol = model.content.trendSymbol {
-                Image(systemName: symbol)
-                    .font(.system(size: 26, weight: .semibold))
-                    .foregroundStyle(valueTint)
+            HStack(alignment: .center, spacing: 8) {
+                headerValue
+                if let symbol = model.content.trendSymbol {
+                    Image(systemName: symbol)
+                        .font(.system(size: 26, weight: .semibold))
+                        .foregroundStyle(valueTint)
+                }
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 2) {
@@ -125,7 +127,13 @@ struct PanelView: View {
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
             HStack {
-                Button("Settings…", action: onOpenSettings)
+                Button(action: onOpenSettings) {
+                    Image(systemName: "gearshape")
+                        .font(.body)
+                }
+                .buttonStyle(.borderless)
+                .help("Settings")
+                .accessibilityLabel("Settings")
                 Spacer()
                 Button("Quit") { NSApplication.shared.terminate(nil) }
             }
