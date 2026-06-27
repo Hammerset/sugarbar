@@ -32,7 +32,8 @@ final class StatusItemController: NSObject {
             // content, so a value wider than the launch width ("—") overlaps itself.
             // Drive the item's length from the label's own width instead.
             label.onWidthChange = { [weak statusItem] width in
-                statusItem?.length = width
+                // +2 absorbs button chrome/rounding so the value never lands a point short and truncates.
+                statusItem?.length = width + 2
             }
             button.target = self
             button.action = #selector(togglePopover)
@@ -74,8 +75,8 @@ private final class ClickThroughHostingView: NSHostingView<BarLabel> {
 
     override func layout() {
         super.layout()
-        let width = intrinsicContentSize.width
-        guard width > 0, abs(width - lastWidth) > 0.5 else { return }
+        let width = ceil(intrinsicContentSize.width)
+        guard width > 0, abs(width - lastWidth) >= 1 else { return }
         lastWidth = width
         onWidthChange?(width)
     }
