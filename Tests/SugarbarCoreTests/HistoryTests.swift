@@ -43,6 +43,30 @@ import Testing
     }
 }
 
+@Suite struct NearestReadingTests {
+    private let base = Date(timeIntervalSince1970: 1_000_000)
+
+    private func reading(minutesAgo: Double, value: Double) -> Reading {
+        Reading(value: value, timestamp: base.addingTimeInterval(-minutesAgo * 60), trend: .stable)
+    }
+
+    @Test func returnsNilForEmptySeries() {
+        #expect(nearestReading(to: base, in: []) == nil)
+    }
+
+    @Test func snapsToTheClosestReadingInTime() {
+        let series = [reading(minutesAgo: 30, value: 4.0), reading(minutesAgo: 10, value: 6.0)]
+        let target = base.addingTimeInterval(-12 * 60)
+        #expect(nearestReading(to: target, in: series)?.value == 6.0)
+    }
+
+    @Test func snapsToEarlierReadingWhenCursorIsBeforeAll() {
+        let series = [reading(minutesAgo: 30, value: 4.0), reading(minutesAgo: 10, value: 6.0)]
+        let target = base.addingTimeInterval(-60 * 60)
+        #expect(nearestReading(to: target, in: series)?.value == 4.0)
+    }
+}
+
 @Suite struct MergeReadingsTests {
     private let base = Date(timeIntervalSince1970: 1_000_000)
 

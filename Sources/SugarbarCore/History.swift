@@ -14,6 +14,14 @@ public func readings(_ readings: [Reading], within window: HistoryWindow, of now
     return readings.filter { $0.timestamp >= cutoff }
 }
 
+/// Snaps a hovered date to the closest actual Reading. We never interpolate between
+/// Readings — every value shown is one the sensor reported.
+public func nearestReading(to date: Date, in readings: [Reading]) -> Reading? {
+    readings.min { lhs, rhs in
+        abs(lhs.timestamp.timeIntervalSince(date)) < abs(rhs.timestamp.timeIntervalSince(date))
+    }
+}
+
 public func mergeReadings(history: [Reading], latest: Reading) -> [Reading] {
     var byTimestamp: [Date: Reading] = [:]
     for reading in history { byTimestamp[reading.timestamp] = reading }
