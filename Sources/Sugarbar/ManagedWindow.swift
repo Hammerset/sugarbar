@@ -19,7 +19,7 @@ final class ManagedWindow {
         } else {
             let newWindow = NSWindow(contentViewController: hosting)
             newWindow.title = title
-            newWindow.styleMask = [.titled, .closable]
+            newWindow.styleMask = [.titled, .closable, .resizable]
             newWindow.isReleasedWhenClosed = false
             newWindow.center()
             window = newWindow

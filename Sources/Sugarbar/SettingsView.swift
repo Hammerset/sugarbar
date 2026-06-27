@@ -45,7 +45,7 @@ struct SettingsView: View {
             saveSection
         }
         .formStyle(.grouped)
-        .frame(width: 460)
+        .frame(width: 460, height: 640)
         .task {
             if isSignedIn, model.availableConnections.isEmpty { await loadConnections() }
         }
