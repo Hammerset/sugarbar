@@ -33,6 +33,11 @@ public func decodeLogin(_ data: Data) throws -> LoginResult {
         break
     case 4:
         throw LibreLinkUpError.termsNotAccepted
+    case 429:
+        // Too many login attempts: the body carries a lockout window. Treat as a
+        // rate-limit so the poll loop backs off instead of reporting bad credentials
+        // (which invites a retry that only extends the lockout).
+        throw LibreLinkUpError.rateLimited
     default:
         throw LibreLinkUpError.authenticationFailed
     }

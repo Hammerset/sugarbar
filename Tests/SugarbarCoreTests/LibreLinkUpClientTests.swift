@@ -186,4 +186,13 @@ private extension Double {
             try decodeLogin(json)
         }
     }
+
+    @Test func throwsRateLimitedOnLockout() {
+        let json = Data(#"""
+        { "status": 429, "data": { "code": 60, "data": { "failures": 3, "interval": 60, "lockout": 300 }, "message": "locked" } }
+        """#.utf8)
+        #expect(throws: LibreLinkUpError.rateLimited) {
+            try decodeLogin(json)
+        }
+    }
 }

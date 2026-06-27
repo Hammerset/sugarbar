@@ -1,6 +1,6 @@
 import Foundation
 
-public let defaultLLUVersion = "4.12.0"
+public let defaultLLUVersion = "4.16.0"
 public let defaultLLURegion = "eu"
 
 public actor LibreLinkUpClient {
