@@ -66,6 +66,66 @@ import Testing
         let reading = try decodeLatestReading(json)
         #expect(reading.trend == .notDetermined)
     }
+
+    @Test func decodesHistoryFromGraphData() throws {
+        let json = Data("""
+        {
+          "status": 0,
+          "data": {
+            "connection": {
+              "glucoseMeasurement": {
+                "FactoryTimestamp": "6/26/2026 5:12:00 PM",
+                "ValueInMgPerDl": 100,
+                "TrendArrow": 4
+              }
+            },
+            "graphData": [
+              { "FactoryTimestamp": "6/26/2026 3:12:00 PM", "ValueInMgPerDl": 90 },
+              { "FactoryTimestamp": "6/26/2026 4:12:00 PM", "ValueInMgPerDl": 180 }
+            ]
+          }
+        }
+        """.utf8)
+
+        let snapshot = try decodeGraph(json)
+
+        #expect(abs(snapshot.latest.value - 5.55) < 0.01)
+        #expect(snapshot.history.count == 2)
+        #expect(snapshot.history[0].value.isApprox(5.0, tolerance: 0.01))
+        #expect(snapshot.history[1].value.isApprox(9.99, tolerance: 0.01))
+        // Historical points carry no trend arrow.
+        #expect(snapshot.history.allSatisfy { $0.trend == .notDetermined })
+        #expect(snapshot.history[0].timestamp < snapshot.history[1].timestamp)
+    }
+
+    @Test func skipsHistoryEntriesWithUnparseableTimestamp() throws {
+        let json = Data("""
+        {
+          "status": 0,
+          "data": {
+            "connection": {
+              "glucoseMeasurement": {
+                "FactoryTimestamp": "6/26/2026 5:12:00 PM",
+                "ValueInMgPerDl": 100
+              }
+            },
+            "graphData": [
+              { "FactoryTimestamp": "not-a-date", "ValueInMgPerDl": 90 },
+              { "FactoryTimestamp": "6/26/2026 4:12:00 PM", "ValueInMgPerDl": 180 }
+            ]
+          }
+        }
+        """.utf8)
+
+        let snapshot = try decodeGraph(json)
+        #expect(snapshot.history.count == 1)
+    }
+}
+
+private extension Double {
+    func isApprox(_ other: Double, tolerance: Double = 0.01) -> Bool {
+        abs(self - other) < tolerance
+    }
 }
 
 @Suite struct ConnectionsDecodingTests {

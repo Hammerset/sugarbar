@@ -12,7 +12,7 @@ final class StatusItemController: NSObject {
         super.init()
 
         popover.behavior = .transient
-        popover.contentViewController = NSHostingController(rootView: PanelView())
+        popover.contentViewController = NSHostingController(rootView: PanelView(model: model))
 
         if let button = statusItem.button {
             let label = ClickThroughHostingView(rootView: BarLabel(model: model))

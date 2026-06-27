@@ -1,10 +1,21 @@
 import Foundation
 
+public struct GraphSnapshot: Equatable, Sendable {
+    public let latest: Reading
+    public let history: [Reading]
+
+    public init(latest: Reading, history: [Reading]) {
+        self.latest = latest
+        self.history = history
+    }
+}
+
 private struct GraphEnvelope: Decodable {
     let data: GraphData
 
     struct GraphData: Decodable {
         let connection: ConnectionData
+        let graphData: [Measurement]
     }
 
     struct ConnectionData: Decodable {
@@ -23,22 +34,29 @@ private struct GraphEnvelope: Decodable {
             case valueInMgPerDl = "ValueInMgPerDl"
             case trendArrow = "TrendArrow"
         }
+
+        func reading() -> Reading? {
+            guard let timestamp = parseLibreTimestamp(factoryTimestamp ?? timestamp) else { return nil }
+            return Reading(
+                value: mmolPerL(fromMgPerDl: valueInMgPerDl),
+                timestamp: timestamp,
+                trend: Trend(apiValue: trendArrow ?? 0)
+            )
+        }
     }
 }
 
-public func decodeLatestReading(_ data: Data) throws -> Reading {
+public func decodeGraph(_ data: Data) throws -> GraphSnapshot {
     let envelope = try JSONDecoder().decode(GraphEnvelope.self, from: data)
-    let measurement = envelope.data.connection.glucoseMeasurement
-
-    guard let timestamp = parseLibreTimestamp(measurement.factoryTimestamp ?? measurement.timestamp) else {
+    guard let latest = envelope.data.connection.glucoseMeasurement.reading() else {
         throw LibreLinkUpError.unexpectedResponse
     }
+    let history = envelope.data.graphData.compactMap { $0.reading() }
+    return GraphSnapshot(latest: latest, history: history)
+}
 
-    return Reading(
-        value: mmolPerL(fromMgPerDl: measurement.valueInMgPerDl),
-        timestamp: timestamp,
-        trend: Trend(apiValue: measurement.trendArrow ?? 0)
-    )
+public func decodeLatestReading(_ data: Data) throws -> Reading {
+    try decodeGraph(data).latest
 }
 
 private let libreTimestampFormatter: DateFormatter = {

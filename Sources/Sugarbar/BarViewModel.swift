@@ -6,6 +6,7 @@ import SugarbarCore
 @Observable
 final class BarViewModel {
     private(set) var latest: Reading?
+    private(set) var history: [Reading] = []
     private(set) var statusMessage: String?
     private(set) var now = Date()
 
@@ -38,6 +39,13 @@ final class BarViewModel {
         isStale ? nil : latest?.trend.symbolName
     }
 
+    func chartSeries(window: HistoryWindow) -> [Reading] {
+        guard let latest else {
+            return readings(history, within: window, of: now)
+        }
+        return readings(mergeReadings(history: history, latest: latest), within: window, of: now)
+    }
+
     func start() {
         guard engine == nil else { return }
         let engine = PollingEngine { [weak self] in
@@ -65,13 +73,14 @@ final class BarViewModel {
             return .transientFailure
         }
         do {
-            let reading = try await makeClient().fetchLatestReading(
+            let snapshot = try await makeClient().fetchGraph(
                 email: credentials.email,
                 password: credentials.password
             )
-            latest = reading
+            latest = snapshot.latest
+            history = snapshot.history
             statusMessage = nil
-            return .success(readingAt: reading.timestamp)
+            return .success(readingAt: snapshot.latest.timestamp)
         } catch LibreLinkUpError.rateLimited {
             statusMessage = "Rate limited — backing off"
             return .rateLimited

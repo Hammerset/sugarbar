@@ -25,7 +25,10 @@ private let graphJSON = """
         "TrendArrow": 4
       }
     },
-    "graphData": []
+    "graphData": [
+      { "FactoryTimestamp": "6/26/2026 3:12:00 PM", "ValueInMgPerDl": 90 },
+      { "FactoryTimestamp": "6/26/2026 4:12:00 PM", "ValueInMgPerDl": 110 }
+    ]
   }
 }
 """
@@ -50,6 +53,22 @@ private let graphJSON = """
         #expect(request.value(forHTTPHeaderField: "account-id") == accountIdHeader(forUserId: "user-xyz"))
         #expect(request.value(forHTTPHeaderField: "product") == "llu.android")
         #expect(request.value(forHTTPHeaderField: "version") == "4.12.0")
+    }
+
+    @Test func fetchesGraphSnapshotWithHistoryFollowingRedirect() async throws {
+        let transport = FakeTransport()
+        await transport.stub(host: "api-eu.libreview.io", path: "/llu/auth/login", json: redirectJSON)
+        await transport.stub(host: "api-eu2.libreview.io", path: "/llu/auth/login", json: loginSuccessJSON)
+        await transport.stub(host: "api-eu2.libreview.io", path: "/llu/connections", json: connectionsJSON)
+        await transport.stub(host: "api-eu2.libreview.io", path: "/llu/connections/p-1/graph", json: graphJSON)
+
+        let client = LibreLinkUpClient(transport: transport)
+        let snapshot = try await client.fetchGraph(email: "a@b.no", password: "pw")
+
+        #expect(abs(snapshot.latest.value - 5.55) < 0.01)
+        #expect(snapshot.latest.trend == .rising)
+        #expect(snapshot.history.count == 2)
+        #expect(snapshot.history[0].timestamp < snapshot.history[1].timestamp)
     }
 
     @Test func sendsCredentialsAndBaseHeadersOnLogin() async throws {

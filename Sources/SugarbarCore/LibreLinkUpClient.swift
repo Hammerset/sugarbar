@@ -13,10 +13,14 @@ public actor LibreLinkUpClient {
     }
 
     public func fetchLatestReading(email: String, password: String) async throws -> Reading {
+        try await fetchGraph(email: email, password: password).latest
+    }
+
+    public func fetchGraph(email: String, password: String) async throws -> GraphSnapshot {
         let session = try await authenticate(email: email, password: password)
         let connections = try await fetchConnections(session)
         guard let patient = connections.first else { throw LibreLinkUpError.noConnections }
-        return try await fetchLatestReading(session, patientId: patient.patientId)
+        return try await fetchGraph(session, patientId: patient.patientId)
     }
 
     struct Session: Sendable {
@@ -53,10 +57,10 @@ public actor LibreLinkUpClient {
         return try decodeConnections(response.body)
     }
 
-    private func fetchLatestReading(_ session: Session, patientId: String) async throws -> Reading {
+    private func fetchGraph(_ session: Session, patientId: String) async throws -> GraphSnapshot {
         let request = authedRequest(session, path: "/llu/connections/\(patientId)/graph")
         let response = try await send(request)
-        return try decodeLatestReading(response.body)
+        return try decodeGraph(response.body)
     }
 
     private func send(_ request: URLRequest) async throws -> HTTPResponse {
