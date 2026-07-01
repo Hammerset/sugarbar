@@ -4,8 +4,10 @@ import PackageDescription
 let package = Package(
     name: "sugarbar",
     platforms: [.macOS(.v15)],
+    products: [
+        .library(name: "SugarbarCore", targets: ["SugarbarCore"]),
+    ],
     targets: [
-        .executableTarget(name: "Sugarbar", dependencies: ["SugarbarCore"]),
         .target(name: "SugarbarCore"),
         .testTarget(name: "SugarbarCoreTests", dependencies: ["SugarbarCore"]),
     ]
