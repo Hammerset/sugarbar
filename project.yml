@@ -51,6 +51,8 @@ targets:
         product: SugarbarCore
       - package: SugarbarCore
         product: SugarbarUI
+      - target: SugarbarWidget
+        embed: true
     settings:
       base:
         PRODUCT_NAME: Sugarbar
@@ -62,6 +64,26 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         # Free-provisioning expires in 7 days; a physical-device install needs a paid
         # team selected here (Signing & Capabilities) with automatic signing (see #21/#24).
+        CODE_SIGN_STYLE: Automatic
+
+  SugarbarWidget:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Sources/SugarbarWidget
+    dependencies:
+      - package: SugarbarCore
+        product: SugarbarCore
+      - package: SugarbarCore
+        product: SugarbarUI
+    settings:
+      base:
+        PRODUCT_NAME: SugarbarWidget
+        PRODUCT_BUNDLE_IDENTIFIER: com.sugarbar.Sugarbar.Widget
+        GENERATE_INFOPLIST_FILE: "NO"
+        INFOPLIST_FILE: packaging/SugarbarWidget-Info.plist
+        CODE_SIGN_ENTITLEMENTS: packaging/SugarbarWidget.entitlements
+        TARGETED_DEVICE_FAMILY: "1"
         CODE_SIGN_STYLE: Automatic
 
 schemes:

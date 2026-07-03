@@ -34,4 +34,15 @@ import Testing
         #expect(Band(mmolPerL: 9.0, thresholds: tighter) == .high)
         #expect(Band(mmolPerL: 6.0, thresholds: tighter) == .inRange)
     }
+
+    @Test(arguments: [
+        (Band.urgentLow, true),
+        (Band.low, false),
+        (Band.inRange, false),
+        (Band.high, false),
+        (Band.urgentHigh, true),
+    ])
+    func isUrgentFlagsOnlyTheUrgentSubLevels(band: Band, expected: Bool) {
+        #expect(band.isUrgent == expected)
+    }
 }

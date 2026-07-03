@@ -43,4 +43,8 @@ public enum Band: Equatable, Sendable {
             self = .urgentHigh
         }
     }
+
+    public var isUrgent: Bool {
+        self == .urgentLow || self == .urgentHigh
+    }
 }
