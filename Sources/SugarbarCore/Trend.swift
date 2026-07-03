@@ -1,4 +1,4 @@
-public enum Trend: Equatable, Sendable {
+public enum Trend: Equatable, Sendable, Codable {
     case notDetermined
     case fallingQuickly
     case falling

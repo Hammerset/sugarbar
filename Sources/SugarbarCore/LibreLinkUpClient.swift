@@ -6,6 +6,7 @@ public let defaultLLURegion = "eu"
 public actor LibreLinkUpClient {
     private let transport: HTTPTransport
     private let appVersion: String
+    private var cachedSession: (email: String, session: Session)?
 
     public init(transport: HTTPTransport, appVersion: String = defaultLLUVersion) {
         self.transport = transport
@@ -20,8 +21,9 @@ public actor LibreLinkUpClient {
     }
 
     public func connections(email: String, password: String) async throws -> [Connection] {
-        let session = try await authenticate(email: email, password: password)
-        return try await fetchConnections(session)
+        try await withSession(email: email, password: password) { session in
+            try await self.fetchConnections(session)
+        }
     }
 
     public func fetchGraph(
@@ -29,18 +31,47 @@ public actor LibreLinkUpClient {
         password: String,
         preferredPatientId: String? = nil
     ) async throws -> GraphSnapshot {
-        let session = try await authenticate(email: email, password: password)
-        let connections = try await fetchConnections(session)
-        guard let patient = selectedConnection(from: connections, preferredPatientId: preferredPatientId) else {
-            throw LibreLinkUpError.noConnections
+        try await withSession(email: email, password: password) { session in
+            let connections = try await self.fetchConnections(session)
+            guard let patient = selectedConnection(from: connections, preferredPatientId: preferredPatientId) else {
+                throw LibreLinkUpError.noConnections
+            }
+            return try await self.fetchGraph(session, patientId: patient.patientId)
         }
-        return try await fetchGraph(session, patientId: patient.patientId)
     }
 
     struct Session: Sendable {
         let token: String
         let accountId: String
         let region: String
+    }
+
+    /// The session token is valid for ~180 days, far longer than any app run, so we
+    /// cache it per email and only pay for a fresh login when the server actually
+    /// rejects it — no proactive expiry tracking needed.
+    private func withSession<T>(
+        email: String,
+        password: String,
+        _ operation: (Session) async throws -> T
+    ) async throws -> T {
+        let session = try await session(email: email, password: password)
+        do {
+            return try await operation(session)
+        } catch LibreLinkUpError.sessionExpired {
+            cachedSession = nil
+            let freshSession = try await authenticate(email: email, password: password)
+            cachedSession = (email, freshSession)
+            return try await operation(freshSession)
+        }
+    }
+
+    private func session(email: String, password: String) async throws -> Session {
+        if let cachedSession, cachedSession.email == email {
+            return cachedSession.session
+        }
+        let session = try await authenticate(email: email, password: password)
+        cachedSession = (email, session)
+        return session
     }
 
     func authenticate(email: String, password: String) async throws -> Session {

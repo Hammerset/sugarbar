@@ -49,7 +49,7 @@ public final class UserDefaultsSettingsStore: SettingsStore, @unchecked Sendable
 
     private let defaults: UserDefaults
 
-    public init(defaults: UserDefaults = .standard) {
+    public init(defaults: UserDefaults = .sugarbarShared) {
         self.defaults = defaults
     }
 

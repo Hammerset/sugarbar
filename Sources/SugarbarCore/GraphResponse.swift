@@ -1,6 +1,6 @@
 import Foundation
 
-public struct GraphSnapshot: Equatable, Sendable {
+public struct GraphSnapshot: Equatable, Sendable, Codable {
     public let latest: Reading?
     public let history: [Reading]
     public let sensorActivation: Date?
