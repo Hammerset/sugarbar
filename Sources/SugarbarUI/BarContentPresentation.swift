@@ -33,6 +33,16 @@ public extension BarContent {
         return nil
     }
 
+    /// The reading's mmol/L value, for presentations (like a Lock Screen gauge) that
+    /// need a number to position on a scale rather than the LO/HI label text.
+    var value: Double? {
+        switch self {
+        case let .live(value, _, _, _): value
+        case let .stale(value, _, _): value
+        case .warmingUp, .empty: nil
+        }
+    }
+
     /// Only a live reading is drawn in its band colour; everything else is greyed so a
     /// stale or absent value can never read as in-range.
     var tint: Color {
