@@ -5,6 +5,7 @@ options:
   bundleIdPrefix: com.sugarbar
   deploymentTarget:
     macOS: "15.0"
+    iOS: "26.0"
   createIntermediateGroups: true
 
 settings:
@@ -40,11 +41,43 @@ targets:
         INFOPLIST_FILE: packaging/Info.plist
         CODE_SIGN_ENTITLEMENTS: packaging/Sugarbar.entitlements
 
+  SugarbarIOS:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources/SugarbarIOS
+    dependencies:
+      - package: SugarbarCore
+        product: SugarbarCore
+      - package: SugarbarCore
+        product: SugarbarUI
+    settings:
+      base:
+        PRODUCT_NAME: Sugarbar
+        PRODUCT_BUNDLE_IDENTIFIER: com.sugarbar.Sugarbar
+        GENERATE_INFOPLIST_FILE: "NO"
+        INFOPLIST_FILE: packaging/SugarbarIOS-Info.plist
+        CODE_SIGN_ENTITLEMENTS: packaging/SugarbarIOS.entitlements
+        TARGETED_DEVICE_FAMILY: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        # Free-provisioning expires in 7 days; a physical-device install needs a paid
+        # team selected here (Signing & Capabilities) with automatic signing (see #21/#24).
+        CODE_SIGN_STYLE: Automatic
+
 schemes:
   Sugarbar:
     build:
       targets:
         Sugarbar: all
+    run:
+      config: Debug
+    archive:
+      config: Release
+
+  SugarbarIOS:
+    build:
+      targets:
+        SugarbarIOS: all
     run:
       config: Debug
     archive:

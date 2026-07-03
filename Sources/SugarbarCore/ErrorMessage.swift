@@ -1,7 +1,6 @@
 import Foundation
-import SugarbarCore
 
-extension Error {
+public extension Error {
     var sugarbarMessage: String {
         if let error = self as? LibreLinkUpError {
             switch error {
@@ -34,6 +33,6 @@ extension Error {
     }
 }
 
-func logDiagnostic(_ context: String, _ error: Error) {
+public func logDiagnostic(_ context: String, _ error: Error) {
     FileHandle.standardError.write(Data("[\(context)] \(error)\n".utf8))
 }
