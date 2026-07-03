@@ -7,6 +7,7 @@ import WidgetKit
 @Observable
 final class GlucoseViewModel {
     private(set) var latest: Reading?
+    private(set) var history: [Reading] = []
     private(set) var sensorActivation: Date?
     private(set) var statusMessage: String?
     private(set) var now = Date()
@@ -40,6 +41,13 @@ final class GlucoseViewModel {
         barContent(latest: latest, sensorActivation: sensorActivation, now: now, thresholds: settings.thresholds)
     }
 
+    func chartSeries(window: HistoryWindow) -> [Reading] {
+        guard let latest else {
+            return readings(history, within: window, of: now)
+        }
+        return readings(mergeReadings(history: history, latest: latest), within: window, of: now)
+    }
+
     func start() {
         guard engine == nil else { return }
         let engine = PollingEngine(planner: PollPlanner(cadence: settings.pollCadence)) { [weak self] in
@@ -68,6 +76,7 @@ final class GlucoseViewModel {
         try? credentialStore.clearCredentials()
         try? credentialStore.clearToken()
         latest = nil
+        history = []
         sensorActivation = nil
         statusMessage = nil
         isSignedIn = false
@@ -89,6 +98,7 @@ final class GlucoseViewModel {
                 preferredPatientId: settings.selectedPatientId
             )
             latest = snapshot.latest
+            history = snapshot.history
             sensorActivation = snapshot.sensorActivation
             statusMessage = nil
             graphSnapshotStore.save(snapshot)

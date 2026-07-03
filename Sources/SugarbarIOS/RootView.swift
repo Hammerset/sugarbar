@@ -7,7 +7,7 @@ struct RootView: View {
     var body: some View {
         Group {
             if model.isSignedIn {
-                ReadingView(model: model)
+                TrendsView(model: model)
             } else {
                 SignInView(model: model)
             }
