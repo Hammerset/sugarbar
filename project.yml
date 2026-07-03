@@ -79,7 +79,7 @@ targets:
     settings:
       base:
         PRODUCT_NAME: SugarbarWidget
-        PRODUCT_BUNDLE_IDENTIFIER: com.sugarbar.Sugarbar.widget
+        PRODUCT_BUNDLE_IDENTIFIER: com.sugarbar.Sugarbar.Widget
         GENERATE_INFOPLIST_FILE: "NO"
         INFOPLIST_FILE: packaging/SugarbarWidget-Info.plist
         CODE_SIGN_ENTITLEMENTS: packaging/SugarbarWidget.entitlements
