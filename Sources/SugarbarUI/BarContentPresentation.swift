@@ -1,7 +1,7 @@
 import SwiftUI
 import SugarbarCore
 
-extension BarContent {
+public extension BarContent {
     /// The number (or LO/HI) to show. `nil` when a glyph stands in for it (warm-up).
     var text: String? {
         switch self {
