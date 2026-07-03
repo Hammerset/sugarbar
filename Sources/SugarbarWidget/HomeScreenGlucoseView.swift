@@ -1,3 +1,4 @@
+import AppIntents
 import SugarbarCore
 import SugarbarUI
 import SwiftUI
@@ -20,6 +21,20 @@ struct HomeScreenGlucoseView: View {
             }
         }
         .containerBackground(.background, for: .widget)
+        .overlay(alignment: .topTrailing) {
+            refreshButton
+        }
+    }
+
+    private var refreshButton: some View {
+        Button(intent: RefreshGlucoseIntent()) {
+            Image(systemName: "arrow.clockwise")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .padding(6)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Refresh")
     }
 
     private var valueRow: some View {
