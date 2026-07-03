@@ -30,6 +30,8 @@ targets:
     dependencies:
       - package: SugarbarCore
         product: SugarbarCore
+      - package: SugarbarCore
+        product: SugarbarUI
     settings:
       base:
         PRODUCT_NAME: Sugarbar

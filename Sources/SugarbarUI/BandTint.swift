@@ -1,7 +1,7 @@
 import SwiftUI
 import SugarbarCore
 
-extension Band {
+public extension Band {
     var tint: Color {
         switch self {
         case .urgentLow: .red
