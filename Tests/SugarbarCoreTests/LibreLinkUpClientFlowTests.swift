@@ -122,25 +122,71 @@ private let graphJSON = """
             try await client.fetchLatestReading(email: "a@b.no", password: "pw")
         }
     }
+
+    @Test func reusesSessionAcrossFetchesWithoutReauthenticating() async throws {
+        let transport = FakeTransport()
+        await transport.stub(host: "api-eu.libreview.io", path: "/llu/auth/login", json: loginSuccessJSON)
+        await transport.stub(host: "api-eu.libreview.io", path: "/llu/connections", json: connectionsJSON)
+        await transport.stub(host: "api-eu.libreview.io", path: "/llu/connections/p-1/graph", json: graphJSON)
+
+        let client = LibreLinkUpClient(transport: transport)
+        _ = try await client.fetchGraph(email: "a@b.no", password: "pw")
+        _ = try await client.fetchGraph(email: "a@b.no", password: "pw")
+
+        let loginCount = await transport.requestCount(host: "api-eu.libreview.io", path: "/llu/auth/login")
+        #expect(loginCount == 1)
+        let graphCount = await transport.requestCount(host: "api-eu.libreview.io", path: "/llu/connections/p-1/graph")
+        #expect(graphCount == 2)
+    }
+
+    @Test func reauthenticatesOnlyAfterServerRejectsCachedSession() async throws {
+        let transport = FakeTransport()
+        await transport.stub(host: "api-eu.libreview.io", path: "/llu/auth/login", json: loginSuccessJSON)
+        await transport.stub(host: "api-eu.libreview.io", path: "/llu/connections", json: connectionsJSON)
+        // First fetch consumes this; the second fetch's cached session gets a 401, forcing
+        // one re-auth + retry, which consumes the trailing success stub.
+        await transport.stub(host: "api-eu.libreview.io", path: "/llu/connections/p-1/graph", json: graphJSON)
+        await transport.stub(host: "api-eu.libreview.io", path: "/llu/connections/p-1/graph", status: 401, json: "{}")
+        await transport.stub(host: "api-eu.libreview.io", path: "/llu/connections/p-1/graph", json: graphJSON)
+
+        let client = LibreLinkUpClient(transport: transport)
+        _ = try await client.fetchGraph(email: "a@b.no", password: "pw")
+        #expect(await transport.requestCount(host: "api-eu.libreview.io", path: "/llu/auth/login") == 1)
+
+        let snapshot = try await client.fetchGraph(email: "a@b.no", password: "pw")
+
+        #expect(snapshot.latest != nil)
+        #expect(await transport.requestCount(host: "api-eu.libreview.io", path: "/llu/auth/login") == 2)
+    }
 }
 
 actor FakeTransport: HTTPTransport {
-    private var stubs: [String: HTTPResponse] = [:]
+    private var stubs: [String: [HTTPResponse]] = [:]
     private(set) var requests: [URLRequest] = []
 
+    /// Repeated calls for the same host/path keep replaying the last stub queued for it;
+    /// queue several to hand out a different response per successive request.
     func stub(host: String, path: String, status: Int = 200, json: String) {
-        stubs[key(host: host, path: path)] = HTTPResponse(status: status, body: Data(json.utf8))
+        stubs[key(host: host, path: path), default: []].append(HTTPResponse(status: status, body: Data(json.utf8)))
     }
 
     func lastRequest(host: String, path: String) -> URLRequest? {
         requests.last { $0.url?.host == host && $0.url?.path == path }
     }
 
+    func requestCount(host: String, path: String) -> Int {
+        requests.count { $0.url?.host == host && $0.url?.path == path }
+    }
+
     func send(_ request: URLRequest) async throws -> HTTPResponse {
         requests.append(request)
-        let host = request.url?.host ?? ""
-        let path = request.url?.path ?? ""
-        return stubs[key(host: host, path: path)] ?? HTTPResponse(status: 404, body: Data())
+        let key = key(host: request.url?.host ?? "", path: request.url?.path ?? "")
+        guard var queue = stubs[key], !queue.isEmpty else {
+            return HTTPResponse(status: 404, body: Data())
+        }
+        let response = queue.count > 1 ? queue.removeFirst() : queue[0]
+        stubs[key] = queue
+        return response
     }
 
     private func key(host: String, path: String) -> String { "\(host)\(path)" }

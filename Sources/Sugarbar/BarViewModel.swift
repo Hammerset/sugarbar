@@ -15,16 +15,19 @@ final class BarViewModel {
 
     private let credentialStore: CredentialStore
     private let settingsStore: SettingsStore
+    private let graphSnapshotStore: GraphSnapshotStore
     private let makeClient: () -> LibreLinkUpClient
     private var engine: PollingEngine?
 
     init(
         credentialStore: CredentialStore = KeychainStore(),
         settingsStore: SettingsStore = UserDefaultsSettingsStore(),
+        graphSnapshotStore: GraphSnapshotStore = UserDefaultsGraphSnapshotStore(),
         makeClient: @escaping () -> LibreLinkUpClient = { LibreLinkUpClient(transport: URLSessionTransport()) }
     ) {
         self.credentialStore = credentialStore
         self.settingsStore = settingsStore
+        self.graphSnapshotStore = graphSnapshotStore
         self.makeClient = makeClient
         self.settings = settingsStore.load()
     }
@@ -100,6 +103,7 @@ final class BarViewModel {
         sensorActivation = nil
         availableConnections = []
         statusMessage = "Open Settings to sign in"
+        graphSnapshotStore.save(GraphSnapshot(latest: nil, history: [], sensorActivation: nil))
     }
 
     func loadConnections() async throws -> [Connection] {
@@ -131,6 +135,7 @@ final class BarViewModel {
             history = snapshot.history
             sensorActivation = snapshot.sensorActivation
             statusMessage = nil
+            graphSnapshotStore.save(snapshot)
             return .success(readingAt: snapshot.latest?.timestamp ?? now)
         } catch {
             logDiagnostic("poll", error)

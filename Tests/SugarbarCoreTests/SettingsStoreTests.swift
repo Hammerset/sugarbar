@@ -64,3 +64,21 @@ import Testing
         #expect(store.load().selectedPatientId == nil)
     }
 }
+
+extension AppGroupDefaultsTests {
+    @Test func settingsStoreDefaultTargetsAppGroupSuite() {
+        UserDefaults.sugarbarShared.removePersistentDomain(forName: sugarbarAppGroupIdentifier)
+        defer { UserDefaults.sugarbarShared.removePersistentDomain(forName: sugarbarAppGroupIdentifier) }
+
+        let settings = Settings(
+            thresholds: Thresholds(urgentLow: 3.5, low: 4.2, high: 9.0, urgentHigh: 14.0),
+            pollCadence: 45,
+            selectedPatientId: "p-9",
+            disclaimerAcknowledged: true
+        )
+        UserDefaultsSettingsStore().save(settings)
+
+        #expect(UserDefaultsSettingsStore().load() == settings)
+        #expect(UserDefaults.sugarbarShared.double(forKey: "poll.cadence") == 45)
+    }
+}

@@ -1,6 +1,6 @@
 import Foundation
 
-public struct Reading: Equatable, Sendable {
+public struct Reading: Equatable, Sendable, Codable {
     public let value: Double
     public let timestamp: Date
     public let trend: Trend
