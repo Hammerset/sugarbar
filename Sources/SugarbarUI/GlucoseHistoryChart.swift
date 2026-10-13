@@ -90,19 +90,15 @@ public struct GlucoseHistoryChart: View {
                 .symbol(dose.kind == .bolus ? .circle : .diamond)
                 .symbolSize(isHovered ? 110 : (dose.kind == .bolus ? 50 : 60))
                 .foregroundStyle(dose.kind.tint)
-                .annotation(position: .top, spacing: 1, overflowResolution: .init(x: .fit(to: .chart), y: .disabled)) {
-                    if isHovered {
-                        doseTooltip(for: dose)
-                    } else {
-                        Text(formatUnits(dose.units))
-                            .font(.caption2)
-                            .foregroundStyle(dose.kind.tint)
-                    }
+                .annotation(position: .top, spacing: 1) {
+                    Text(formatUnits(dose.units))
+                        .font(.caption2)
+                        .foregroundStyle(dose.kind.tint)
                 }
             }
 
-            if hoveredDose == nil, let selected = nearestReading(to: selectedDate, in: series) {
-                selectionMarks(for: selected)
+            if let selected = nearestReading(to: selectedDate, in: series) {
+                selectionMarks(for: selected, dose: hoveredDose)
             }
         }
         .chartXSelection(value: $selectedDate)
@@ -111,26 +107,11 @@ public struct GlucoseHistoryChart: View {
         .frame(height: 180)
     }
 
-    /// Hovering near a dose marker takes over the selection from the glucose line.
+    /// A dose close enough to the hovered time joins the selection tooltip.
     private var hoveredDose: InsulinDose? {
         guard let selectedDate else { return nil }
         let tolerance = xDomain.upperBound.timeIntervalSince(xDomain.lowerBound) / 60
         return nearestInsulinDose(to: selectedDate, in: doses, tolerance: tolerance)
-    }
-
-    private func doseTooltip(for dose: InsulinDose) -> some View {
-        VStack(alignment: .leading, spacing: 1) {
-            Text("\(formatUnits(dose.units)) u \(dose.insulinName ?? dose.kind.label)")
-                .font(.caption)
-                .fontWeight(.semibold)
-                .foregroundStyle(dose.kind.tint)
-            Text("\(dose.kind.label) · \(dose.timestamp, format: .dateTime.hour().minute())")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-        }
-        .padding(.horizontal, 6)
-        .padding(.vertical, 3)
-        .background(.background, in: RoundedRectangle(cornerRadius: 4))
     }
 
     private func nearestReading(to date: Date?, in series: [Reading]) -> Reading? {
@@ -139,7 +120,7 @@ public struct GlucoseHistoryChart: View {
     }
 
     @ChartContentBuilder
-    private func selectionMarks(for reading: Reading) -> some ChartContent {
+    private func selectionMarks(for reading: Reading, dose: InsulinDose?) -> some ChartContent {
         RuleMark(x: .value("Time", reading.timestamp))
             .lineStyle(StrokeStyle(lineWidth: 1))
             .foregroundStyle(.secondary.opacity(0.5))
@@ -150,12 +131,20 @@ public struct GlucoseHistoryChart: View {
                     .foregroundStyle(.primary)
             }
             .annotation(position: .bottom, spacing: 4, overflowResolution: .init(x: .fit(to: .chart), y: .disabled)) {
-                Text(reading.timestamp, format: .dateTime.hour().minute())
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 4)
-                    .padding(.vertical, 1)
-                    .background(.background, in: RoundedRectangle(cornerRadius: 4))
+                HStack(spacing: 4) {
+                    Text(reading.timestamp, format: .dateTime.hour().minute())
+                        .foregroundStyle(.secondary)
+                    if let dose {
+                        Text("· \(formatUnits(dose.units)) u \(dose.insulinName ?? dose.kind.label) \(dose.kind.label)")
+                            .fontWeight(.semibold)
+                            .foregroundStyle(dose.kind.tint)
+                    }
+                }
+                .font(.caption2)
+                .fixedSize()
+                .padding(.horizontal, 4)
+                .padding(.vertical, 1)
+                .background(.background, in: RoundedRectangle(cornerRadius: 4))
             }
 
         PointMark(
