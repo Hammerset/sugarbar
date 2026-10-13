@@ -82,21 +82,26 @@ public struct GlucoseHistoryChart: View {
             }
 
             ForEach(doses) { dose in
+                let isHovered = dose == hoveredDose
                 PointMark(
                     x: .value("Time", dose.timestamp),
                     y: .value("mmol/L", doseBaseline)
                 )
                 .symbol(dose.kind == .bolus ? .circle : .diamond)
-                .symbolSize(dose.kind == .bolus ? 50 : 60)
+                .symbolSize(isHovered ? 110 : (dose.kind == .bolus ? 50 : 60))
                 .foregroundStyle(dose.kind.tint)
-                .annotation(position: .top, spacing: 1) {
-                    Text(formatUnits(dose.units))
-                        .font(.caption2)
-                        .foregroundStyle(dose.kind.tint)
+                .annotation(position: .top, spacing: 1, overflowResolution: .init(x: .fit(to: .chart), y: .disabled)) {
+                    if isHovered {
+                        doseTooltip(for: dose)
+                    } else {
+                        Text(formatUnits(dose.units))
+                            .font(.caption2)
+                            .foregroundStyle(dose.kind.tint)
+                    }
                 }
             }
 
-            if let selected = nearestReading(to: selectedDate, in: series) {
+            if hoveredDose == nil, let selected = nearestReading(to: selectedDate, in: series) {
                 selectionMarks(for: selected)
             }
         }
@@ -104,23 +109,28 @@ public struct GlucoseHistoryChart: View {
         .chartXScale(domain: xDomain)
         .chartYScale(domain: yDomain)
         .frame(height: 180)
-        .overlay(alignment: .topTrailing) {
-            if !doses.isEmpty { doseLegend }
-        }
     }
 
-    private var doseLegend: some View {
-        HStack(spacing: 8) {
-            Label("bolus", systemImage: "circle.fill").foregroundStyle(InsulinKind.bolus.tint)
-            Label("basal", systemImage: "diamond.fill").foregroundStyle(InsulinKind.basal.tint)
+    /// Hovering near a dose marker takes over the selection from the glucose line.
+    private var hoveredDose: InsulinDose? {
+        guard let selectedDate else { return nil }
+        let tolerance = xDomain.upperBound.timeIntervalSince(xDomain.lowerBound) / 60
+        return nearestInsulinDose(to: selectedDate, in: doses, tolerance: tolerance)
+    }
+
+    private func doseTooltip(for dose: InsulinDose) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text("\(formatUnits(dose.units)) u \(dose.insulinName ?? dose.kind.label)")
+                .font(.caption)
+                .fontWeight(.semibold)
+                .foregroundStyle(dose.kind.tint)
+            Text("\(dose.kind.label) · \(dose.timestamp, format: .dateTime.hour().minute())")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
         }
-        .font(.caption2)
-        .labelStyle(.titleAndIcon)
-        .fixedSize()
         .padding(.horizontal, 6)
-        .padding(.vertical, 2)
-        .background(.background.opacity(0.8), in: RoundedRectangle(cornerRadius: 4))
-        .padding(4)
+        .padding(.vertical, 3)
+        .background(.background, in: RoundedRectangle(cornerRadius: 4))
     }
 
     private func nearestReading(to date: Date?, in series: [Reading]) -> Reading? {
@@ -183,6 +193,13 @@ public extension InsulinKind {
         switch self {
         case .bolus: .blue
         case .basal: .purple
+        }
+    }
+
+    var label: String {
+        switch self {
+        case .bolus: "bolus"
+        case .basal: "basal"
         }
     }
 }

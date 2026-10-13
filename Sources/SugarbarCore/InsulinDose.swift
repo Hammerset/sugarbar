@@ -32,6 +32,13 @@ public func insulinDoses(_ doses: [InsulinDose], within window: HistoryWindow, o
     return doses.filter { $0.timestamp >= cutoff && $0.timestamp <= now }
 }
 
+/// The dose closest to a hovered date, if any lies within `tolerance` of it.
+public func nearestInsulinDose(to date: Date, in doses: [InsulinDose], tolerance: TimeInterval) -> InsulinDose? {
+    doses
+        .min { abs($0.timestamp.timeIntervalSince(date)) < abs($1.timestamp.timeIntervalSince(date)) }
+        .flatMap { abs($0.timestamp.timeIntervalSince(date)) <= tolerance ? $0 : nil }
+}
+
 public struct InsulinTotals: Equatable, Sendable {
     public let bolus: Double
     public let basal: Double
