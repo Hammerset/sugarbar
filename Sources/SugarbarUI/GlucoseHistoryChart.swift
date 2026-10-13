@@ -82,7 +82,7 @@ public struct GlucoseHistoryChart: View {
             }
 
             ForEach(doses) { dose in
-                let isHovered = dose == hoveredDose
+                let isHovered = hoveredDoses.contains(dose)
                 PointMark(
                     x: .value("Time", dose.timestamp),
                     y: .value("mmol/L", doseBaseline)
@@ -98,7 +98,7 @@ public struct GlucoseHistoryChart: View {
             }
 
             if let selected = nearestReading(to: selectedDate, in: series) {
-                selectionMarks(for: selected, dose: hoveredDose)
+                selectionMarks(for: selected, doses: hoveredDoses)
             }
         }
         .chartXSelection(value: $selectedDate)
@@ -107,11 +107,11 @@ public struct GlucoseHistoryChart: View {
         .frame(height: 180)
     }
 
-    /// A dose close enough to the hovered time joins the selection tooltip.
-    private var hoveredDose: InsulinDose? {
-        guard let selectedDate else { return nil }
+    /// Doses close enough to the hovered time join the selection tooltip.
+    private var hoveredDoses: [InsulinDose] {
+        guard let selectedDate else { return [] }
         let tolerance = xDomain.upperBound.timeIntervalSince(xDomain.lowerBound) / 60
-        return nearestInsulinDose(to: selectedDate, in: doses, tolerance: tolerance)
+        return insulinDoses(near: selectedDate, in: doses, tolerance: tolerance)
     }
 
     private func nearestReading(to date: Date?, in series: [Reading]) -> Reading? {
@@ -120,7 +120,7 @@ public struct GlucoseHistoryChart: View {
     }
 
     @ChartContentBuilder
-    private func selectionMarks(for reading: Reading, dose: InsulinDose?) -> some ChartContent {
+    private func selectionMarks(for reading: Reading, doses: [InsulinDose]) -> some ChartContent {
         RuleMark(x: .value("Time", reading.timestamp))
             .lineStyle(StrokeStyle(lineWidth: 1))
             .foregroundStyle(.secondary.opacity(0.5))
@@ -130,12 +130,12 @@ public struct GlucoseHistoryChart: View {
                     .fontWeight(.semibold)
                     .foregroundStyle(.primary)
             }
-            .annotation(position: .bottom, spacing: 4, overflowResolution: .init(x: .fit(to: .chart), y: .disabled)) {
-                HStack(spacing: 4) {
+            .annotation(position: .bottom, spacing: 4, overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))) {
+                VStack(alignment: .leading, spacing: 1) {
                     Text(reading.timestamp, format: .dateTime.hour().minute())
                         .foregroundStyle(.secondary)
-                    if let dose {
-                        Text("· \(formatUnits(dose.units)) u \(dose.insulinName ?? dose.kind.label)")
+                    ForEach(doses) { dose in
+                        Text("\(dose.timestamp, format: .dateTime.hour().minute()) · \(formatUnits(dose.units)) u · \(dose.insulinName ?? dose.kind.label)")
                             .fontWeight(.semibold)
                             .foregroundStyle(dose.kind.tint)
                     }

@@ -142,8 +142,8 @@ private let dosesJSON = """
         let recent = insulinDoses(doses, within: .fourHours, of: now)
         #expect(recent.map(\.units) == [4, 1.5])
         #expect(insulinTotals(recent) == InsulinTotals(bolus: 5.5, basal: 0))
-        #expect(nearestInsulinDose(to: now.addingTimeInterval(-500), in: doses, tolerance: 300)?.units == 1.5)
-        #expect(nearestInsulinDose(to: now.addingTimeInterval(-1000), in: doses, tolerance: 300) == nil)
+        #expect(insulinDoses(near: now.addingTimeInterval(-500), in: doses, tolerance: 300).map(\.units) == [1.5])
+        #expect(insulinDoses(near: now.addingTimeInterval(-1000), in: doses, tolerance: 300).isEmpty)
         #expect(formatUnits(1.5) == "1.5")
         #expect(formatUnits(10) == "10")
     }
