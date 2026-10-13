@@ -40,33 +40,34 @@ private struct GraphDataEnvelope: Decodable {
     struct Entry: Decodable {
         let name: String?
         let timestamp: String?
-        let x: Double?
         let value: Double?
         let deviceName: String?
 
-        func dose(kind: InsulinKind) -> InsulinDose? {
-            guard let units = value, let timestamp = parseGlookoTimestamp(timestamp) ?? x.map(Date.init(timeIntervalSince1970:)) else {
-                return nil
-            }
+        func dose(kind: InsulinKind, timeZone: TimeZone) -> InsulinDose? {
+            guard let units = value, let timestamp = parseGlookoTimestamp(timestamp, timeZone: timeZone) else { return nil }
             return InsulinDose(kind: kind, units: units, timestamp: timestamp, insulinName: name, deviceName: deviceName)
         }
     }
 }
 
-public func decodeGlookoDoses(_ data: Data) throws -> [InsulinDose] {
+public func decodeGlookoDoses(_ data: Data, timeZone: TimeZone = .current) throws -> [InsulinDose] {
     let envelope = try JSONDecoder().decode(GraphDataEnvelope.self, from: data)
-    let boluses = (envelope.series?.gkInsulinBolus ?? []).compactMap { $0.dose(kind: .bolus) }
-    let basals = (envelope.series?.gkInsulinBasal ?? []).compactMap { $0.dose(kind: .basal) }
+    let boluses = (envelope.series?.gkInsulinBolus ?? []).compactMap { $0.dose(kind: .bolus, timeZone: timeZone) }
+    let basals = (envelope.series?.gkInsulinBasal ?? []).compactMap { $0.dose(kind: .basal, timeZone: timeZone) }
     return (boluses + basals).sorted { $0.timestamp < $1.timestamp }
 }
 
 private let fractionalISO8601 = Date.ISO8601FormatStyle(includingFractionalSeconds: true)
 
-func parseGlookoTimestamp(_ string: String?) -> Date? {
-    guard let string else { return nil }
-    return (try? fractionalISO8601.parse(string)) ?? (try? Date.ISO8601FormatStyle().parse(string))
+/// Glooko's timestamps (and query dates) are the patient's wall-clock time with a
+/// literal "Z" suffix, not UTC: "22:20:49.000Z" means 22:20 local.
+func parseGlookoTimestamp(_ string: String?, timeZone: TimeZone) -> Date? {
+    guard let string,
+          let wallClock = (try? fractionalISO8601.parse(string)) ?? (try? Date.ISO8601FormatStyle().parse(string))
+    else { return nil }
+    return wallClock.addingTimeInterval(-Double(timeZone.secondsFromGMT(for: wallClock)))
 }
 
-func formatGlookoTimestamp(_ date: Date) -> String {
-    fractionalISO8601.format(date)
+func formatGlookoTimestamp(_ date: Date, timeZone: TimeZone) -> String {
+    fractionalISO8601.format(date.addingTimeInterval(Double(timeZone.secondsFromGMT(for: date))))
 }

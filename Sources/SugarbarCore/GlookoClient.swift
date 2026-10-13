@@ -6,10 +6,12 @@ public let glookoSignInURL = URL(string: "https://my.glooko.com/users/sign_in?lo
 /// JSON endpoints its dashboard uses. Cookies ride on the transport's URLSession.
 public actor GlookoClient {
     private let transport: HTTPTransport
+    private let timeZone: TimeZone
     private var cachedSession: (email: String, session: Session)?
 
-    public init(transport: HTTPTransport) {
+    public init(transport: HTTPTransport, timeZone: TimeZone = .current) {
         self.transport = transport
+        self.timeZone = timeZone
     }
 
     public func fetchDoses(email: String, password: String, from start: Date, to end: Date) async throws -> [InsulinDose] {
@@ -80,8 +82,8 @@ public actor GlookoClient {
         var components = URLComponents(url: session.apiBase.appending(path: "api/v3/graph/data"), resolvingAgainstBaseURL: false)!
         components.queryItems = [
             URLQueryItem(name: "patient", value: session.patientId),
-            URLQueryItem(name: "startDate", value: formatGlookoTimestamp(start)),
-            URLQueryItem(name: "endDate", value: formatGlookoTimestamp(end)),
+            URLQueryItem(name: "startDate", value: formatGlookoTimestamp(start, timeZone: timeZone)),
+            URLQueryItem(name: "endDate", value: formatGlookoTimestamp(end, timeZone: timeZone)),
             URLQueryItem(name: "locale", value: "en-GB"),
             URLQueryItem(name: "insulinTooltips", value: "true"),
             URLQueryItem(name: "filterBgReadings", value: "true"),
@@ -98,7 +100,7 @@ public actor GlookoClient {
         let response = try await send(request)
         // An expired cookie session bounces the JSON call to the HTML sign-in page with a 200.
         if response.body.first == UInt8(ascii: "<") { throw GlookoError.sessionExpired }
-        return try decodeGlookoDoses(response.body)
+        return try decodeGlookoDoses(response.body, timeZone: timeZone)
     }
 
     private func send(_ request: URLRequest) async throws -> HTTPResponse {

@@ -28,22 +28,25 @@ private let dosesJSON = """
 }
 """
 
+private let oslo = TimeZone(identifier: "Europe/Oslo")!
+
 @Suite struct GlookoDecodingTests {
-    @Test func decodesPenBolusAndManualBasalSortedByTime() throws {
-        let doses = try decodeGlookoDoses(Data(dosesJSON.utf8))
+    @Test func decodesPenBolusAndManualBasalAsWallClockTime() throws {
+        let doses = try decodeGlookoDoses(Data(dosesJSON.utf8), timeZone: oslo)
 
         #expect(doses.count == 2)
         #expect(doses[0].kind == .basal)
         #expect(doses[0].units == 9)
         #expect(doses[0].insulinName == "Tresiba")
         #expect(doses[0].isManualEntry)
-        #expect(doses[0].timestamp == Date(timeIntervalSince1970: 1_791_794_100))
+        // "08:35:00.000Z" is 08:35 Oslo time (UTC+2 in October), i.e. 06:35Z.
+        #expect(doses[0].timestamp == Date(timeIntervalSince1970: 1_791_794_100 - 7200))
 
         #expect(doses[1].kind == .bolus)
         #expect(doses[1].units == 4)
         #expect(doses[1].deviceName == "Novo Nordisk NovoPen® 6/Echo Plus")
         #expect(!doses[1].isManualEntry)
-        #expect(doses[1].timestamp == Date(timeIntervalSince1970: 1_791_825_242))
+        #expect(doses[1].timestamp == Date(timeIntervalSince1970: 1_791_825_242 - 7200))
     }
 
     @Test func toleratesMissingSeries() throws {
@@ -76,7 +79,7 @@ private let dosesJSON = """
         let transport = FakeTransport()
         await stubHappyPath(transport)
 
-        let client = GlookoClient(transport: transport)
+        let client = GlookoClient(transport: transport, timeZone: oslo)
         let doses = try await client.fetchDoses(
             email: "a@b.no", password: "p w",
             from: Date(timeIntervalSince1970: 1_791_700_000), to: Date(timeIntervalSince1970: 1_791_800_000)
@@ -94,7 +97,8 @@ private let dosesJSON = """
         let graphURL = try #require(graph.url)
         let query = try #require(URLComponents(url: graphURL, resolvingAgainstBaseURL: false)?.queryItems)
         #expect(query.contains(URLQueryItem(name: "patient", value: "eu-west-1-patient-42")))
-        #expect(query.contains(URLQueryItem(name: "startDate", value: "2026-10-11T06:26:40.000Z")))
+        // Query bounds are sent as Oslo wall-clock time with a literal Z, matching Glooko's convention.
+        #expect(query.contains(URLQueryItem(name: "startDate", value: "2026-10-11T08:26:40.000Z")))
         #expect(query.filter { $0.name == "series[]" }.map(\.value) == ["gkInsulinBolus", "gkInsulinBasal"])
         #expect(graph.value(forHTTPHeaderField: "Origin") == "https://eu.my.glooko.com")
         #expect(graph.value(forHTTPHeaderField: "X-Requested-With") == "XMLHttpRequest")
