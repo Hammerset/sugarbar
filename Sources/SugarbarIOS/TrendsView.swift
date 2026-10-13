@@ -7,6 +7,7 @@ struct TrendsView: View {
 
     @State private var window: HistoryWindow = .fourHours
     @State private var selectedDate: Date?
+    @State private var showGlookoSignIn = false
 
     private var thresholds: Thresholds { model.thresholds }
     private var series: [Reading] { model.chartSeries(window: window) }
@@ -28,6 +29,7 @@ struct TrendsView: View {
 
                     GlucoseHistoryChart(
                         series: series,
+                        doses: model.chartDoses(window: window),
                         thresholds: thresholds,
                         latest: model.latest,
                         valueTint: model.content.tint,
@@ -36,6 +38,7 @@ struct TrendsView: View {
                     )
                     windowPicker
                     timeInRangeCard
+                    insulinCard
 
                     Text("Not a medical device — for information only.")
                         .font(.caption2)
@@ -51,6 +54,9 @@ struct TrendsView: View {
             }
             .navigationTitle("Trends")
             .navigationBarTitleDisplayMode(.inline)
+            .sheet(isPresented: $showGlookoSignIn) {
+                GlookoSignInView(model: model)
+            }
         }
     }
 
@@ -134,6 +140,48 @@ struct TrendsView: View {
                     .foregroundStyle(.secondary)
             }
         }
+    }
+
+    @ViewBuilder
+    private var insulinCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Insulin")
+                .font(.headline)
+            if model.isGlookoSignedIn {
+                let totals = insulinTotals(model.chartDoses(window: window))
+                HStack(spacing: 0) {
+                    insulinStat(label: "Bolus", units: totals.bolus, tint: InsulinKind.bolus.tint)
+                    insulinStat(label: "Basal", units: totals.basal, tint: InsulinKind.basal.tint)
+                }
+                if let error = model.insulinSyncError {
+                    Text(error)
+                        .font(.footnote)
+                        .foregroundStyle(.orange)
+                }
+                Button("Disconnect Glooko", role: .destructive) {
+                    model.signOutGlooko()
+                }
+                .font(.footnote)
+            } else {
+                Text("Connect your Glooko account to see pen and logged doses on the graph.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                Button("Connect Glooko") { showGlookoSignIn = true }
+                    .buttonStyle(.bordered)
+            }
+        }
+    }
+
+    private func insulinStat(label: String, units: Double, tint: Color) -> some View {
+        VStack(spacing: 4) {
+            Text("\(formatUnits(units)) u")
+                .font(.title2.bold())
+                .foregroundStyle(tint)
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
     }
 
     private func timeInRangeStat(label: String, percent: Double, tint: Color) -> some View {

@@ -166,8 +166,8 @@ actor FakeTransport: HTTPTransport {
 
     /// Repeated calls for the same host/path keep replaying the last stub queued for it;
     /// queue several to hand out a different response per successive request.
-    func stub(host: String, path: String, status: Int = 200, json: String) {
-        stubs[key(host: host, path: path), default: []].append(HTTPResponse(status: status, body: Data(json.utf8)))
+    func stub(host: String, path: String, status: Int = 200, json: String, url: URL? = nil) {
+        stubs[key(host: host, path: path), default: []].append(HTTPResponse(status: status, body: Data(json.utf8), url: url))
     }
 
     func lastRequest(host: String, path: String) -> URLRequest? {

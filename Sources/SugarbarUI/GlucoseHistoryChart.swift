@@ -3,9 +3,11 @@ import SwiftUI
 import SugarbarCore
 
 /// A platform-neutral history chart: readings against the reference range, with
-/// threshold lines, the latest point highlighted, and drag-to-inspect selection.
+/// threshold lines, the latest point highlighted, insulin doses marked along the
+/// floor, and drag-to-inspect selection.
 public struct GlucoseHistoryChart: View {
     private let series: [Reading]
+    private let doses: [InsulinDose]
     private let thresholds: Thresholds
     private let latest: Reading?
     private let valueTint: Color
@@ -14,6 +16,7 @@ public struct GlucoseHistoryChart: View {
 
     public init(
         series: [Reading],
+        doses: [InsulinDose] = [],
         thresholds: Thresholds,
         latest: Reading?,
         valueTint: Color,
@@ -21,6 +24,7 @@ public struct GlucoseHistoryChart: View {
         selectedDate: Binding<Date?>
     ) {
         self.series = series
+        self.doses = doses
         self.thresholds = thresholds
         self.latest = latest
         self.valueTint = valueTint
@@ -77,14 +81,46 @@ public struct GlucoseHistoryChart: View {
                 .foregroundStyle(valueTint)
             }
 
+            ForEach(doses) { dose in
+                PointMark(
+                    x: .value("Time", dose.timestamp),
+                    y: .value("mmol/L", doseBaseline)
+                )
+                .symbol(dose.kind == .bolus ? .circle : .diamond)
+                .symbolSize(dose.kind == .bolus ? 50 : 60)
+                .foregroundStyle(dose.kind.tint)
+                .annotation(position: .top, spacing: 1) {
+                    Text(formatUnits(dose.units))
+                        .font(.caption2)
+                        .foregroundStyle(dose.kind.tint)
+                }
+            }
+
             if let selected = nearestReading(to: selectedDate, in: series) {
                 selectionMarks(for: selected)
             }
         }
         .chartXSelection(value: $selectedDate)
         .chartXScale(domain: xDomain)
-        .chartYScale(domain: yDomain(for: series))
+        .chartYScale(domain: yDomain)
         .frame(height: 180)
+        .overlay(alignment: .topTrailing) {
+            if !doses.isEmpty { doseLegend }
+        }
+    }
+
+    private var doseLegend: some View {
+        HStack(spacing: 8) {
+            Label("bolus", systemImage: "circle.fill").foregroundStyle(InsulinKind.bolus.tint)
+            Label("basal", systemImage: "diamond.fill").foregroundStyle(InsulinKind.basal.tint)
+        }
+        .font(.caption2)
+        .labelStyle(.titleAndIcon)
+        .fixedSize()
+        .padding(.horizontal, 6)
+        .padding(.vertical, 2)
+        .background(.background.opacity(0.8), in: RoundedRectangle(cornerRadius: 4))
+        .padding(4)
     }
 
     private func nearestReading(to date: Date?, in series: [Reading]) -> Reading? {
@@ -129,10 +165,24 @@ public struct GlucoseHistoryChart: View {
         ]
     }
 
-    private func yDomain(for series: [Reading]) -> ClosedRange<Double> {
+    /// Doses sit in a strip below the glucose range so their markers never collide with the line.
+    private var yDomain: ClosedRange<Double> {
         let values = series.map(\.value)
         let low = min(values.min() ?? thresholds.urgentLow, thresholds.urgentLow) - 0.5
         let high = max(values.max() ?? thresholds.urgentHigh, thresholds.urgentHigh) + 0.5
-        return max(0, low)...high
+        return max(0, low - (doses.isEmpty ? 0 : doseStripHeight))...high
+    }
+
+    private let doseStripHeight = 1.4
+
+    private var doseBaseline: Double { yDomain.lowerBound + 0.35 }
+}
+
+public extension InsulinKind {
+    var tint: Color {
+        switch self {
+        case .bolus: .blue
+        case .basal: .purple
+        }
     }
 }

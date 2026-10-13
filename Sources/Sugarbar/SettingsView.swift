@@ -8,6 +8,9 @@ struct SettingsView: View {
     @State private var isSignedIn: Bool
     @State private var email: String
     @State private var password: String
+    @State private var isGlookoSignedIn: Bool
+    @State private var glookoEmail: String
+    @State private var glookoPassword: String
     @State private var urgentLow: Double
     @State private var low: Double
     @State private var high: Double
@@ -26,6 +29,9 @@ struct SettingsView: View {
         _isSignedIn = State(initialValue: model.accountEmail != nil)
         _email = State(initialValue: model.accountEmail ?? "")
         _password = State(initialValue: "")
+        _isGlookoSignedIn = State(initialValue: model.glookoAccountEmail != nil)
+        _glookoEmail = State(initialValue: model.glookoAccountEmail ?? "")
+        _glookoPassword = State(initialValue: "")
         _urgentLow = State(initialValue: settings.thresholds.urgentLow)
         _low = State(initialValue: settings.thresholds.low)
         _high = State(initialValue: settings.thresholds.high)
@@ -39,13 +45,14 @@ struct SettingsView: View {
         Form {
             accountSection
             sensorSection
+            glookoSection
             referenceRangeSection
             pollingSection
             generalSection
             saveSection
         }
         .formStyle(.grouped)
-        .frame(width: 460, height: 640)
+        .frame(width: 460, height: 760)
         .task {
             if isSignedIn, model.availableConnections.isEmpty { await loadConnections() }
         }
@@ -97,6 +104,39 @@ struct SettingsView: View {
             if let connectionError {
                 Text(connectionError).font(.caption).foregroundStyle(.red)
             }
+        }
+    }
+
+    private var glookoSection: some View {
+        Section {
+            if isGlookoSignedIn {
+                LabeledContent("Signed in", value: glookoEmail)
+                if let error = model.insulinSyncError {
+                    Text(error).font(.caption).foregroundStyle(.red)
+                }
+                Button("Sign Out", role: .destructive) {
+                    model.signOutGlooko()
+                    isGlookoSignedIn = false
+                    glookoPassword = ""
+                }
+            } else {
+                TextField("Email", text: $glookoEmail)
+                    .textContentType(.username)
+                SecureField("Password", text: $glookoPassword)
+                    .textContentType(.password)
+                Button("Sign In") {
+                    model.saveGlookoCredentials(Credentials(email: glookoEmail, password: glookoPassword))
+                    isGlookoSignedIn = true
+                    glookoPassword = ""
+                }
+                .disabled(glookoEmail.isEmpty || glookoPassword.isEmpty)
+            }
+        } header: {
+            Text("Glooko Account (Insulin)")
+        } footer: {
+            Text("Optional. Shows pen and manually logged doses from Glooko on the history graph.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 

@@ -12,27 +12,38 @@ final class GlucoseViewModel {
     private(set) var statusMessage: String?
     private(set) var now = Date()
     private(set) var isSignedIn: Bool
+    private(set) var isGlookoSignedIn: Bool
+    private(set) var doses: [InsulinDose] = []
+    private(set) var insulinSyncError: String?
 
     private let settings: Settings
     private let credentialStore: CredentialStore
+    private let glookoCredentialStore: CredentialStore
     private let graphSnapshotStore: GraphSnapshotStore
     private let client: LibreLinkUpClient
+    private let glookoClient: GlookoClient
     private let reloadWidgets: () -> Void
     private var engine: PollingEngine?
+    private var lastDoseFetch: Date?
 
     init(
         credentialStore: CredentialStore = KeychainStore(),
+        glookoCredentialStore: CredentialStore = KeychainStore(servicePrefix: glookoKeychainServicePrefix),
         settingsStore: SettingsStore = UserDefaultsSettingsStore(),
         graphSnapshotStore: GraphSnapshotStore = UserDefaultsGraphSnapshotStore(),
         client: LibreLinkUpClient = LibreLinkUpClient(transport: URLSessionTransport()),
+        glookoClient: GlookoClient = GlookoClient(transport: URLSessionTransport()),
         reloadWidgets: @escaping () -> Void = { WidgetCenter.shared.reloadAllTimelines() }
     ) {
         self.credentialStore = credentialStore
+        self.glookoCredentialStore = glookoCredentialStore
         self.settings = settingsStore.load()
         self.graphSnapshotStore = graphSnapshotStore
         self.client = client
+        self.glookoClient = glookoClient
         self.reloadWidgets = reloadWidgets
         self.isSignedIn = (try? credentialStore.loadCredentials()) != nil
+        self.isGlookoSignedIn = (try? glookoCredentialStore.loadCredentials()) != nil
     }
 
     var thresholds: Thresholds { settings.thresholds }
@@ -46,6 +57,10 @@ final class GlucoseViewModel {
             return readings(history, within: window, of: now)
         }
         return readings(mergeReadings(history: history, latest: latest), within: window, of: now)
+    }
+
+    func chartDoses(window: HistoryWindow) -> [InsulinDose] {
+        insulinDoses(doses, within: window, of: now)
     }
 
     func start() {
@@ -84,9 +99,32 @@ final class GlucoseViewModel {
         reloadWidgets()
     }
 
+    func signInGlooko(_ credentials: Credentials) {
+        try? glookoCredentialStore.saveCredentials(credentials)
+        isGlookoSignedIn = true
+        insulinSyncError = nil
+        lastDoseFetch = nil
+        Task { await refreshDoses() }
+    }
+
+    func signOutGlooko() {
+        try? glookoCredentialStore.clearCredentials()
+        isGlookoSignedIn = false
+        doses = []
+        insulinSyncError = nil
+        lastDoseFetch = nil
+    }
+
+    /// Background refreshes skip Glooko: nothing in the widget shows doses, and the task budget is tight.
     @discardableResult
-    func pollOnce() async -> PollOutcome {
+    func pollOnce(includingInsulin: Bool = true) async -> PollOutcome {
         now = Date()
+        let outcome = await pollGlucose()
+        if includingInsulin { await refreshDosesIfDue() }
+        return outcome
+    }
+
+    private func pollGlucose() async -> PollOutcome {
         guard let credentials = try? credentialStore.loadCredentials() else {
             statusMessage = "Sign in to see your glucose"
             return .transientFailure
@@ -110,5 +148,29 @@ final class GlucoseViewModel {
             if case LibreLinkUpError.rateLimited = error { return .rateLimited }
             return .transientFailure
         }
+    }
+
+    private func refreshDosesIfDue() async {
+        guard isGlookoSignedIn else { return }
+        if let lastDoseFetch, now.timeIntervalSince(lastDoseFetch) < doseRefreshInterval { return }
+        await refreshDoses()
+    }
+
+    private func refreshDoses() async {
+        guard let credentials = try? glookoCredentialStore.loadCredentials() else { return }
+        let fetchedAt = Date()
+        do {
+            doses = try await glookoClient.fetchDoses(
+                email: credentials.email,
+                password: credentials.password,
+                from: fetchedAt.addingTimeInterval(-doseLookback),
+                to: fetchedAt.addingTimeInterval(60)
+            )
+            insulinSyncError = nil
+        } catch {
+            logDiagnostic("glooko", error)
+            insulinSyncError = error.sugarbarMessage
+        }
+        lastDoseFetch = fetchedAt
     }
 }

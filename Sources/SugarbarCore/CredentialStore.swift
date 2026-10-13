@@ -12,11 +12,12 @@ public struct Credentials: Equatable, Sendable {
 
 public extension Credentials {
     static func fromEnvironment(
-        _ environment: [String: String] = ProcessInfo.processInfo.environment
+        _ environment: [String: String] = ProcessInfo.processInfo.environment,
+        service: String = "LIBRE"
     ) -> Credentials? {
         guard
-            let email = environment["SUGARBAR_LIBRE_EMAIL"],
-            let password = environment["SUGARBAR_LIBRE_PASSWORD"]
+            let email = environment["SUGARBAR_\(service)_EMAIL"],
+            let password = environment["SUGARBAR_\(service)_PASSWORD"]
         else { return nil }
         return Credentials(email: email, password: password)
     }

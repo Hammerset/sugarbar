@@ -20,6 +20,20 @@ public extension Error {
                 return "Unexpected response from LibreLinkUp."
             }
         }
+        if let error = self as? GlookoError {
+            switch error {
+            case .authenticationFailed:
+                return "Glooko sign-in rejected — double-check the email and password."
+            case .sessionExpired:
+                return "Glooko session expired — signing back in…"
+            case .rateLimited:
+                return "Glooko refused the request (rate-limit). Try again shortly."
+            case let .httpError(status):
+                return "Glooko returned an error (HTTP \(status))."
+            case .unexpectedResponse:
+                return "Unexpected response from Glooko."
+            }
+        }
         if let urlError = self as? URLError {
             switch urlError.code {
             case .notConnectedToInternet, .networkConnectionLost, .cannotConnectToHost,
