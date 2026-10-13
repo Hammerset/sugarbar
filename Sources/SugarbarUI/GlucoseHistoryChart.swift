@@ -135,7 +135,7 @@ public struct GlucoseHistoryChart: View {
                     Text(reading.timestamp, format: .dateTime.hour().minute())
                         .foregroundStyle(.secondary)
                     if let dose {
-                        Text("· \(formatUnits(dose.units)) u \(dose.insulinName ?? dose.kind.label) \(dose.kind.label)")
+                        Text("· \(formatUnits(dose.units)) u \(dose.insulinName ?? dose.kind.label)")
                             .fontWeight(.semibold)
                             .foregroundStyle(dose.kind.tint)
                     }
