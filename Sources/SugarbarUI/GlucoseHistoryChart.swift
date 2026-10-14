@@ -3,9 +3,11 @@ import SwiftUI
 import SugarbarCore
 
 /// A platform-neutral history chart: readings against the reference range, with
-/// threshold lines, the latest point highlighted, and drag-to-inspect selection.
+/// threshold lines, the latest point highlighted, insulin doses marked along the
+/// floor, and drag-to-inspect selection.
 public struct GlucoseHistoryChart: View {
     private let series: [Reading]
+    private let doses: [InsulinDose]
     private let thresholds: Thresholds
     private let latest: Reading?
     private let valueTint: Color
@@ -14,6 +16,7 @@ public struct GlucoseHistoryChart: View {
 
     public init(
         series: [Reading],
+        doses: [InsulinDose] = [],
         thresholds: Thresholds,
         latest: Reading?,
         valueTint: Color,
@@ -21,6 +24,7 @@ public struct GlucoseHistoryChart: View {
         selectedDate: Binding<Date?>
     ) {
         self.series = series
+        self.doses = doses
         self.thresholds = thresholds
         self.latest = latest
         self.valueTint = valueTint
@@ -77,14 +81,37 @@ public struct GlucoseHistoryChart: View {
                 .foregroundStyle(valueTint)
             }
 
+            ForEach(doses) { dose in
+                let isHovered = hoveredDoses.contains(dose)
+                PointMark(
+                    x: .value("Time", dose.timestamp),
+                    y: .value("mmol/L", doseBaseline)
+                )
+                .symbol(dose.kind == .bolus ? .circle : .diamond)
+                .symbolSize(isHovered ? 110 : (dose.kind == .bolus ? 50 : 60))
+                .foregroundStyle(dose.kind.tint)
+                .annotation(position: .top, spacing: 1) {
+                    Text(formatUnits(dose.units))
+                        .font(.caption2)
+                        .foregroundStyle(dose.kind.tint)
+                }
+            }
+
             if let selected = nearestReading(to: selectedDate, in: series) {
-                selectionMarks(for: selected)
+                selectionMarks(for: selected, doses: hoveredDoses)
             }
         }
         .chartXSelection(value: $selectedDate)
         .chartXScale(domain: xDomain)
-        .chartYScale(domain: yDomain(for: series))
+        .chartYScale(domain: yDomain)
         .frame(height: 180)
+    }
+
+    /// Doses close enough to the hovered time join the selection tooltip.
+    private var hoveredDoses: [InsulinDose] {
+        guard let selectedDate else { return [] }
+        let tolerance = xDomain.upperBound.timeIntervalSince(xDomain.lowerBound) / 60
+        return insulinDoses(near: selectedDate, in: doses, tolerance: tolerance)
     }
 
     private func nearestReading(to date: Date?, in series: [Reading]) -> Reading? {
@@ -93,7 +120,7 @@ public struct GlucoseHistoryChart: View {
     }
 
     @ChartContentBuilder
-    private func selectionMarks(for reading: Reading) -> some ChartContent {
+    private func selectionMarks(for reading: Reading, doses: [InsulinDose]) -> some ChartContent {
         RuleMark(x: .value("Time", reading.timestamp))
             .lineStyle(StrokeStyle(lineWidth: 1))
             .foregroundStyle(.secondary.opacity(0.5))
@@ -103,13 +130,21 @@ public struct GlucoseHistoryChart: View {
                     .fontWeight(.semibold)
                     .foregroundStyle(.primary)
             }
-            .annotation(position: .bottom, spacing: 4, overflowResolution: .init(x: .fit(to: .chart), y: .disabled)) {
-                Text(reading.timestamp, format: .dateTime.hour().minute())
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 4)
-                    .padding(.vertical, 1)
-                    .background(.background, in: RoundedRectangle(cornerRadius: 4))
+            .annotation(position: .bottom, spacing: 4, overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))) {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(reading.timestamp, format: .dateTime.hour().minute())
+                        .foregroundStyle(.secondary)
+                    ForEach(doses) { dose in
+                        Text("\(dose.timestamp, format: .dateTime.hour().minute()) · \(formatUnits(dose.units)) u · \(dose.insulinName ?? dose.kind.label)")
+                            .fontWeight(.semibold)
+                            .foregroundStyle(dose.kind.tint)
+                    }
+                }
+                .font(.caption2)
+                .fixedSize()
+                .padding(.horizontal, 4)
+                .padding(.vertical, 1)
+                .background(.background, in: RoundedRectangle(cornerRadius: 4))
             }
 
         PointMark(
@@ -129,10 +164,31 @@ public struct GlucoseHistoryChart: View {
         ]
     }
 
-    private func yDomain(for series: [Reading]) -> ClosedRange<Double> {
+    /// Doses sit in a strip below the glucose range so their markers never collide with the line.
+    private var yDomain: ClosedRange<Double> {
         let values = series.map(\.value)
         let low = min(values.min() ?? thresholds.urgentLow, thresholds.urgentLow) - 0.5
         let high = max(values.max() ?? thresholds.urgentHigh, thresholds.urgentHigh) + 0.5
-        return max(0, low)...high
+        return max(0, low - (doses.isEmpty ? 0 : doseStripHeight))...high
+    }
+
+    private let doseStripHeight = 1.4
+
+    private var doseBaseline: Double { yDomain.lowerBound + 0.35 }
+}
+
+public extension InsulinKind {
+    var tint: Color {
+        switch self {
+        case .bolus: .blue
+        case .basal: .purple
+        }
+    }
+
+    var label: String {
+        switch self {
+        case .bolus: "bolus"
+        case .basal: "basal"
+        }
     }
 }

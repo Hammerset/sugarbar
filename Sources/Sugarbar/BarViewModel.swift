@@ -12,23 +12,32 @@ final class BarViewModel {
     private(set) var now = Date()
     private(set) var settings: Settings
     private(set) var availableConnections: [Connection] = []
+    private(set) var doses: [InsulinDose] = []
+    private(set) var insulinSyncError: String?
 
     private let credentialStore: CredentialStore
+    private let glookoCredentialStore: CredentialStore
     private let settingsStore: SettingsStore
     private let graphSnapshotStore: GraphSnapshotStore
     private let makeClient: () -> LibreLinkUpClient
+    private let glookoClient: GlookoClient
     private var engine: PollingEngine?
+    private var lastDoseFetch: Date?
 
     init(
         credentialStore: CredentialStore = KeychainStore(),
+        glookoCredentialStore: CredentialStore = KeychainStore(servicePrefix: glookoKeychainServicePrefix),
         settingsStore: SettingsStore = UserDefaultsSettingsStore(),
         graphSnapshotStore: GraphSnapshotStore = UserDefaultsGraphSnapshotStore(),
-        makeClient: @escaping () -> LibreLinkUpClient = { LibreLinkUpClient(transport: URLSessionTransport()) }
+        makeClient: @escaping () -> LibreLinkUpClient = { LibreLinkUpClient(transport: URLSessionTransport()) },
+        glookoClient: GlookoClient = GlookoClient(transport: URLSessionTransport())
     ) {
         self.credentialStore = credentialStore
+        self.glookoCredentialStore = glookoCredentialStore
         self.settingsStore = settingsStore
         self.graphSnapshotStore = graphSnapshotStore
         self.makeClient = makeClient
+        self.glookoClient = glookoClient
         self.settings = settingsStore.load()
     }
 
@@ -47,6 +56,10 @@ final class BarViewModel {
         resolveCredentials()?.email
     }
 
+    var glookoAccountEmail: String? {
+        resolveGlookoCredentials()?.email
+    }
+
     var needsDisclaimer: Bool {
         !settings.disclaimerAcknowledged
     }
@@ -56,6 +69,10 @@ final class BarViewModel {
             return readings(history, within: window, of: now)
         }
         return readings(mergeReadings(history: history, latest: latest), within: window, of: now)
+    }
+
+    func chartDoses(window: HistoryWindow) -> [InsulinDose] {
+        insulinDoses(doses, within: window, of: now)
     }
 
     func start() {
@@ -106,6 +123,20 @@ final class BarViewModel {
         graphSnapshotStore.save(GraphSnapshot(latest: nil, history: [], sensorActivation: nil))
     }
 
+    func saveGlookoCredentials(_ credentials: Credentials) {
+        try? glookoCredentialStore.saveCredentials(credentials)
+        insulinSyncError = nil
+        lastDoseFetch = nil
+        Task { await refreshDoses() }
+    }
+
+    func signOutGlooko() {
+        try? glookoCredentialStore.clearCredentials()
+        doses = []
+        insulinSyncError = nil
+        lastDoseFetch = nil
+    }
+
     func loadConnections() async throws -> [Connection] {
         guard let credentials = resolveCredentials() else {
             throw LibreLinkUpError.authenticationFailed
@@ -121,6 +152,12 @@ final class BarViewModel {
     @discardableResult
     func pollOnce() async -> PollOutcome {
         now = Date()
+        let outcome = await pollGlucose()
+        await refreshDosesIfDue()
+        return outcome
+    }
+
+    private func pollGlucose() async -> PollOutcome {
         guard let credentials = resolveCredentials() else {
             statusMessage = "Open Settings to sign in"
             return .transientFailure
@@ -145,6 +182,32 @@ final class BarViewModel {
         }
     }
 
+    /// Doses only change when the pen is scanned or an entry is typed, so Glooko is
+    /// polled far less often than the sensor.
+    private func refreshDosesIfDue() async {
+        guard resolveGlookoCredentials() != nil else { return }
+        if let lastDoseFetch, now.timeIntervalSince(lastDoseFetch) < doseRefreshInterval { return }
+        await refreshDoses()
+    }
+
+    private func refreshDoses() async {
+        guard let credentials = resolveGlookoCredentials() else { return }
+        let fetchedAt = Date()
+        do {
+            doses = try await glookoClient.fetchDoses(
+                email: credentials.email,
+                password: credentials.password,
+                from: fetchedAt.addingTimeInterval(-doseLookback),
+                to: fetchedAt.addingTimeInterval(60)
+            )
+            insulinSyncError = nil
+        } catch {
+            logDiagnostic("glooko", error)
+            insulinSyncError = error.sugarbarMessage
+        }
+        lastDoseFetch = fetchedAt
+    }
+
     private func startEngine() {
         let engine = PollingEngine(planner: PollPlanner(cadence: settings.pollCadence)) { [weak self] in
             await self?.pollOnce() ?? .transientFailure
@@ -161,5 +224,9 @@ final class BarViewModel {
 
     private func resolveCredentials() -> Credentials? {
         Credentials.fromEnvironment() ?? (try? credentialStore.loadCredentials())
+    }
+
+    private func resolveGlookoCredentials() -> Credentials? {
+        Credentials.fromEnvironment(service: "GLOOKO") ?? (try? glookoCredentialStore.loadCredentials())
     }
 }

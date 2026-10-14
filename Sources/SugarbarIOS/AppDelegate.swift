@@ -31,7 +31,7 @@ func scheduleBackgroundRefresh() {
 private func handleBackgroundRefresh(_ task: BGAppRefreshTask) {
     scheduleBackgroundRefresh()
     let poll = Task {
-        let outcome = await GlucoseViewModel().pollOnce()
+        let outcome = await GlucoseViewModel().pollOnce(includingInsulin: false)
         switch outcome {
         case .success:
             task.setTaskCompleted(success: true)

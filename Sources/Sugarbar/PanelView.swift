@@ -14,6 +14,7 @@ struct PanelView: View {
         VStack(alignment: .leading, spacing: 12) {
             header
             chart
+            insulinLine
             rangePicker
             Divider()
             footer
@@ -66,12 +67,27 @@ struct PanelView: View {
     private var chart: some View {
         GlucoseHistoryChart(
             series: model.chartSeries(window: window),
+            doses: model.chartDoses(window: window),
             thresholds: thresholds,
             latest: model.latest,
             valueTint: valueTint,
             xDomain: xDomain,
             selectedDate: $selectedDate
         )
+    }
+
+    @ViewBuilder
+    private var insulinLine: some View {
+        if let error = model.insulinSyncError {
+            Text("Glooko: \(error)")
+                .font(.caption)
+                .foregroundStyle(.orange)
+        } else if model.glookoAccountEmail != nil {
+            let totals = insulinTotals(model.chartDoses(window: window))
+            Text("Insulin \(window.hours)h · bolus \(formatUnits(totals.bolus)) u · basal \(formatUnits(totals.basal)) u")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
     }
 
     private var rangePicker: some View {
