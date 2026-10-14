@@ -14,11 +14,13 @@ final class BarViewModel {
     private(set) var availableConnections: [Connection] = []
     private(set) var doses: [InsulinDose] = []
     private(set) var insulinSyncError: String?
+    private(set) var meals: [Meal] = []
 
     private let credentialStore: CredentialStore
     private let glookoCredentialStore: CredentialStore
     private let settingsStore: SettingsStore
     private let graphSnapshotStore: GraphSnapshotStore
+    private let mealStore: MealStore
     private let makeClient: () -> LibreLinkUpClient
     private let glookoClient: GlookoClient
     private var engine: PollingEngine?
@@ -29,6 +31,7 @@ final class BarViewModel {
         glookoCredentialStore: CredentialStore = KeychainStore(servicePrefix: glookoKeychainServicePrefix),
         settingsStore: SettingsStore = UserDefaultsSettingsStore(),
         graphSnapshotStore: GraphSnapshotStore = UserDefaultsGraphSnapshotStore(),
+        mealStore: MealStore = UserDefaultsMealStore(),
         makeClient: @escaping () -> LibreLinkUpClient = { LibreLinkUpClient(transport: URLSessionTransport()) },
         glookoClient: GlookoClient = GlookoClient(transport: URLSessionTransport())
     ) {
@@ -36,6 +39,7 @@ final class BarViewModel {
         self.glookoCredentialStore = glookoCredentialStore
         self.settingsStore = settingsStore
         self.graphSnapshotStore = graphSnapshotStore
+        self.mealStore = mealStore
         self.makeClient = makeClient
         self.glookoClient = glookoClient
         self.settings = settingsStore.load()
@@ -73,6 +77,10 @@ final class BarViewModel {
 
     func chartDoses(window: HistoryWindow) -> [InsulinDose] {
         insulinDoses(doses, within: window, of: now)
+    }
+
+    func chartMeals(window: HistoryWindow) -> [Meal] {
+        SugarbarCore.meals(meals, within: window, of: now)
     }
 
     func start() {
@@ -152,6 +160,7 @@ final class BarViewModel {
     @discardableResult
     func pollOnce() async -> PollOutcome {
         now = Date()
+        meals = mealStore.load()
         let outcome = await pollGlucose()
         await refreshDosesIfDue()
         return outcome
