@@ -8,6 +8,8 @@ struct TrendsView: View {
     @State private var window: HistoryWindow = .fourHours
     @State private var selectedDate: Date?
     @State private var showGlookoSignIn = false
+    @State private var showMealLog = false
+    @State private var showClaudeKey = false
 
     private var thresholds: Thresholds { model.thresholds }
     private var series: [Reading] { model.chartSeries(window: window) }
@@ -30,6 +32,7 @@ struct TrendsView: View {
                     GlucoseHistoryChart(
                         series: series,
                         doses: model.chartDoses(window: window),
+                        meals: model.chartMeals(window: window),
                         thresholds: thresholds,
                         latest: model.latest,
                         valueTint: model.content.tint,
@@ -39,6 +42,7 @@ struct TrendsView: View {
                     windowPicker
                     timeInRangeCard
                     insulinCard
+                    mealsCard
 
                     Text("Not a medical device — for information only.")
                         .font(.caption2)
@@ -56,6 +60,12 @@ struct TrendsView: View {
             .navigationBarTitleDisplayMode(.inline)
             .sheet(isPresented: $showGlookoSignIn) {
                 GlookoSignInView(model: model)
+            }
+            .sheet(isPresented: $showMealLog) {
+                MealLogView(model: model)
+            }
+            .sheet(isPresented: $showClaudeKey) {
+                ClaudeAPIKeyView(model: model)
             }
         }
     }
@@ -167,6 +177,36 @@ struct TrendsView: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
                 Button("Connect Glooko") { showGlookoSignIn = true }
+                    .buttonStyle(.bordered)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var mealsCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Meals")
+                .font(.headline)
+            if model.hasClaudeAPIKey {
+                Text("\(formatGrams(carbTotal(model.chartMeals(window: window)))) g carbs logged in the last \(window.hours)h")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                if let error = model.healthKitError {
+                    Text(error)
+                        .font(.footnote)
+                        .foregroundStyle(.orange)
+                }
+                Button("Log Meal", systemImage: "camera") { showMealLog = true }
+                    .buttonStyle(.borderedProminent)
+                Button("Remove Claude API Key", role: .destructive) {
+                    model.clearClaudeAPIKey()
+                }
+                .font(.footnote)
+            } else {
+                Text("Add a Claude API key to log meals from a photo. Claude estimates the carbs, you confirm them, and the meal is saved to Apple Health.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                Button("Add Claude API Key") { showClaudeKey = true }
                     .buttonStyle(.bordered)
             }
         }

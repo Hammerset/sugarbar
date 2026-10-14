@@ -48,6 +48,14 @@ _Avoid_: injection, shot, entry.
 A connected insulin pen (NovoPen 6) whose memory is synced to the Glooko app over NFC. A **Dose** from a Pen carries the pen's name; a manually typed Dose carries none.
 _Avoid_: device (too generic), smart pen.
 
+**Meal**:
+Carbohydrates eaten at a point in time, in grams, with a short description. Logged from a photo on the phone: Claude proposes an **Estimate**, the user confirms or edits the grams, and only the confirmed figure is saved.
+_Avoid_: food log, entry, carbs (the number, not the event).
+
+**Estimate**:
+Claude's proposed carb figure for a Meal photo, with the foods it saw, what it assumed, and a confidence. Never saved as-is — a starting point for the review step.
+_Avoid_: result, answer, prediction.
+
 ## Relationships
 
 - A **Primary** shares to one or more **Followers**; sugarbar authenticates as a **Follower**.
@@ -56,6 +64,9 @@ _Avoid_: device (too generic), smart pen.
 - A **Sensor State** can exist with no current **Reading** (e.g. warm-up).
 - A **Dose** is independent of any **Reading**; the graph overlays Doses on Readings by time only.
 - Doses are only as fresh as the last **Pen** sync — there is no Staleness notion for them.
+- A **Meal** is independent of any **Reading** or **Dose**; the graph overlays all three by time only.
+- A **Meal** always passes through an **Estimate** and a user review; the stored Meal is the user's figure, not Claude's.
+- Meals live in the App Group (phone, Mac panel, widget) and are mirrored to Apple Health. Nothing flows from Meals to Glooko.
 
 ## Example dialogue
 

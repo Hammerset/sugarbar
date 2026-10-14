@@ -68,6 +68,7 @@ struct PanelView: View {
         GlucoseHistoryChart(
             series: model.chartSeries(window: window),
             doses: model.chartDoses(window: window),
+            meals: model.chartMeals(window: window),
             thresholds: thresholds,
             latest: model.latest,
             valueTint: valueTint,

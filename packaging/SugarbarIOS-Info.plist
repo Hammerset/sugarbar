@@ -45,5 +45,13 @@
             </array>
         </dict>
     </array>
+    <key>NSCameraUsageDescription</key>
+    <string>Sugarbar photographs meals so Claude can estimate their carbohydrates.</string>
+    <key>NSPhotoLibraryUsageDescription</key>
+    <string>Sugarbar reads the meal photos you pick so Claude can estimate their carbohydrates.</string>
+    <key>NSHealthShareUsageDescription</key>
+    <string>Sugarbar does not read Health data; carbohydrates are only written.</string>
+    <key>NSHealthUpdateUsageDescription</key>
+    <string>Sugarbar saves the carbohydrates of the meals you log to Apple Health.</string>
 </dict>
 </plist>
