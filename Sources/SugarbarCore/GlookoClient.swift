@@ -108,7 +108,8 @@ public actor GlookoClient {
         switch response.status {
         case 200...299:
             return response
-        case 401:
+        // Glooko answers an expired cookie session with 421 and a "session timeout?" JSON body.
+        case 401, 421:
             throw GlookoError.sessionExpired
         case 429:
             throw GlookoError.rateLimited

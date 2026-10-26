@@ -114,6 +114,26 @@ private let oslo = TimeZone(identifier: "Europe/Oslo")!
         }
     }
 
+    @Test func reauthenticatesWhenExpiredSessionIsRejectedWith421() async throws {
+        let transport = FakeTransport()
+        await stubHappyPath(transport)
+        await transport.stub(host: "my.glooko.com", path: "/users/sign_in", json: loginPageHTML)
+        await transport.stub(host: "my.glooko.com", path: "/users/sign_in", json: dashboardHTML, url: URL(string: "https://eu.my.glooko.com/dashboard"))
+        await transport.stub(
+            host: "eu.api.glooko.com", path: "/api/v3/graph/data", status: 421,
+            json: #"{"success":false,"message":"Client tried to access the API without proper credentials (session timeout?)"}"#
+        )
+        await transport.stub(host: "eu.api.glooko.com", path: "/api/v3/graph/data", json: dosesJSON)
+
+        let client = GlookoClient(transport: transport)
+        _ = try await client.fetchDoses(email: "a@b.no", password: "pw", from: .distantPast, to: .distantFuture)
+        let doses = try await client.fetchDoses(email: "a@b.no", password: "pw", from: .distantPast, to: .distantFuture)
+
+        #expect(doses.count == 2)
+        #expect(await transport.requestCount(host: "my.glooko.com", path: "/users/sign_in") == 4)
+        #expect(await transport.requestCount(host: "eu.api.glooko.com", path: "/api/v3/graph/data") == 3)
+    }
+
     @Test func reauthenticatesOnceWhenSessionBouncesToSignInPage() async throws {
         let transport = FakeTransport()
         await transport.stub(host: "my.glooko.com", path: "/users/sign_in", json: loginPageHTML)
