@@ -15,6 +15,9 @@ final class GlucoseViewModel {
     private(set) var isGlookoSignedIn: Bool
     private(set) var doses: [InsulinDose] = []
     private(set) var insulinSyncError: String?
+    private(set) var meals: [Meal] = []
+    private(set) var hasClaudeAPIKey: Bool
+    private(set) var healthKitError: String?
 
     private let settings: Settings
     private let credentialStore: CredentialStore
@@ -22,6 +25,10 @@ final class GlucoseViewModel {
     private let graphSnapshotStore: GraphSnapshotStore
     private let client: LibreLinkUpClient
     private let glookoClient: GlookoClient
+    private let mealStore: MealStore
+    private let claudeKeyStore: CredentialStore
+    private let mealAnalyzer: MealAnalyzer
+    private let carbWriter: HealthKitCarbWriter
     private let reloadWidgets: () -> Void
     private var engine: PollingEngine?
     private var lastDoseFetch: Date?
@@ -33,6 +40,10 @@ final class GlucoseViewModel {
         graphSnapshotStore: GraphSnapshotStore = UserDefaultsGraphSnapshotStore(),
         client: LibreLinkUpClient = LibreLinkUpClient(transport: URLSessionTransport()),
         glookoClient: GlookoClient = GlookoClient(transport: URLSessionTransport()),
+        mealStore: MealStore = UserDefaultsMealStore(),
+        claudeKeyStore: CredentialStore = KeychainStore(servicePrefix: anthropicKeychainServicePrefix),
+        mealAnalyzer: MealAnalyzer = MealAnalyzer(transport: URLSessionTransport()),
+        carbWriter: HealthKitCarbWriter = HealthKitCarbWriter(),
         reloadWidgets: @escaping () -> Void = { WidgetCenter.shared.reloadAllTimelines() }
     ) {
         self.credentialStore = credentialStore
@@ -41,9 +52,15 @@ final class GlucoseViewModel {
         self.graphSnapshotStore = graphSnapshotStore
         self.client = client
         self.glookoClient = glookoClient
+        self.mealStore = mealStore
+        self.claudeKeyStore = claudeKeyStore
+        self.mealAnalyzer = mealAnalyzer
+        self.carbWriter = carbWriter
         self.reloadWidgets = reloadWidgets
         self.isSignedIn = (try? credentialStore.loadCredentials()) != nil
         self.isGlookoSignedIn = (try? glookoCredentialStore.loadCredentials()) != nil
+        self.meals = mealStore.load()
+        self.hasClaudeAPIKey = Self.resolveClaudeAPIKey(claudeKeyStore) != nil
     }
 
     var thresholds: Thresholds { settings.thresholds }
@@ -61,6 +78,10 @@ final class GlucoseViewModel {
 
     func chartDoses(window: HistoryWindow) -> [InsulinDose] {
         insulinDoses(doses, within: window, of: now)
+    }
+
+    func chartMeals(window: HistoryWindow) -> [Meal] {
+        SugarbarCore.meals(meals, within: window, of: now)
     }
 
     func start() {
@@ -115,6 +136,33 @@ final class GlucoseViewModel {
         lastDoseFetch = nil
     }
 
+    func saveClaudeAPIKey(_ key: String) {
+        try? claudeKeyStore.saveToken(key)
+        hasClaudeAPIKey = true
+    }
+
+    func clearClaudeAPIKey() {
+        try? claudeKeyStore.clearToken()
+        hasClaudeAPIKey = Self.resolveClaudeAPIKey(claudeKeyStore) != nil
+    }
+
+    func estimateMeal(imageJPEG: Data, note: String) async throws -> MealEstimate {
+        guard let apiKey = Self.resolveClaudeAPIKey(claudeKeyStore) else { throw MealAnalyzerError.invalidAPIKey }
+        return try await mealAnalyzer.estimate(imageJPEG: imageJPEG, note: note, apiKey: apiKey)
+    }
+
+    func logMeal(_ meal: Meal) async {
+        meals = (meals + [meal]).sorted { $0.timestamp < $1.timestamp }
+        mealStore.save(meals)
+        do {
+            try await carbWriter.write(meal)
+            healthKitError = nil
+        } catch {
+            logDiagnostic("healthkit", error)
+            healthKitError = "Saved here, but not to Apple Health: \(error.sugarbarMessage)"
+        }
+    }
+
     /// Background refreshes skip Glooko: nothing in the widget shows doses, and the task budget is tight.
     @discardableResult
     func pollOnce(includingInsulin: Bool = true) async -> PollOutcome {
@@ -148,6 +196,10 @@ final class GlucoseViewModel {
             if case LibreLinkUpError.rateLimited = error { return .rateLimited }
             return .transientFailure
         }
+    }
+
+    private static func resolveClaudeAPIKey(_ store: CredentialStore) -> String? {
+        anthropicAPIKey() ?? (try? store.loadToken())
     }
 
     private func refreshDosesIfDue() async {
