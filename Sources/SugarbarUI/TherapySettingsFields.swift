@@ -65,7 +65,7 @@ public struct TherapySettingsFields: View {
     }
 }
 
-private extension View {
+extension View {
     @ViewBuilder
     func decimalKeyboard() -> some View {
         #if os(iOS)

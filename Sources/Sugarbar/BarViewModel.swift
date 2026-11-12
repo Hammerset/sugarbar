@@ -83,6 +83,27 @@ final class BarViewModel {
         return historyStore.doses(in: window.interval(endingAt: now))
     }
 
+    var recentManualDoses: [InsulinDose] {
+        _ = historyRevision
+        return historyStore.recentManualDoses(now: Date())
+    }
+
+    func defaultInsulinName(for kind: InsulinKind) -> String? {
+        _ = historyRevision
+        return historyStore.latestInsulinName(kind: kind, now: Date())
+    }
+
+    func saveManualDose(_ dose: InsulinDose, replacing old: InsulinDose?) {
+        if let old { historyStore.replace(old, with: dose) } else { historyStore.append(doses: [dose]) }
+        now = Date()
+        historyRevision += 1
+    }
+
+    func deleteManualDose(_ dose: InsulinDose) {
+        historyStore.delete(dose: dose)
+        historyRevision += 1
+    }
+
     func chartMeals(window: HistoryWindow) -> [Meal] {
         SugarbarCore.meals(meals, within: window, of: now)
     }
