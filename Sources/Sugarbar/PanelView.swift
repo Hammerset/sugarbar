@@ -7,6 +7,7 @@ struct PanelView: View {
     var onOpenSettings: () -> Void = {}
     var onAskClaude: () -> Void = {}
     var onLogMeal: () -> Void = {}
+    var onPlanMeal: () -> Void = {}
     @State private var window: HistoryWindow = .fourHours
     @State private var selectedDate: Date?
     @State private var showsDoseEntry = false
@@ -29,6 +30,13 @@ struct PanelView: View {
             }
             chart
             insulinLine
+            ForEach(activeMealPlans(model.meals, now: model.now)) { meal in
+                Button(mealSummaryLine(meal), action: onPlanMeal)
+                    .buttonStyle(.plain)
+                    .font(.caption)
+                    .foregroundStyle(meal.isPlanned ? Color.secondary : Color.orange)
+                    .lineLimit(2)
+            }
             if showsDoseEntry {
                 DoseEntrySection(model: model, isPresented: $showsDoseEntry)
             }
@@ -128,10 +136,12 @@ struct PanelView: View {
                 .foregroundStyle(.tertiary)
             HStack(spacing: 12) {
                 Button("Log Dose", systemImage: "syringe") { showsDoseEntry.toggle() }
+                Button("Plan Meal", systemImage: "list.bullet.clipboard", action: onPlanMeal)
                 Button("Log Meal", systemImage: "fork.knife", action: onLogMeal)
-                Button("Ask Claude", systemImage: "bubble.left.and.text.bubble.right", action: onAskClaude)
             }
             .buttonStyle(.borderless)
+            Button("Ask Claude", systemImage: "bubble.left.and.text.bubble.right", action: onAskClaude)
+                .buttonStyle(.borderless)
             HStack {
                 Button(action: onOpenSettings) {
                     Image(systemName: "gearshape")

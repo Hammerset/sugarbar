@@ -174,7 +174,7 @@ public func formatTherapyNumber(_ value: Double) -> String {
 
 /// Only eaten Meals with user-confirmed carbs are evidence.
 func mealCountsAsEvidence(_ meal: Meal) -> Bool {
-    meal.carbsGrams > 0
+    meal.isEaten && meal.carbsGrams > 0
 }
 
 /// Learns insulin sensitivity from Correction Episodes and carb ratio from Meal Episodes in

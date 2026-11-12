@@ -65,11 +65,27 @@ A connected insulin pen (NovoPen 6) whose memory is synced to the Glooko app ove
 _Avoid_: device (too generic), smart pen.
 
 **Meal**:
-Carbohydrates eaten at a point in time, in grams, with a short description. Logged on the phone or the Mac from a photo, a description, or both: Claude proposes an **Estimate**, the user confirms or edits the grams, and only the confirmed figure is saved. The user can also skip the Estimate and type the grams. A saved Meal can be edited or deleted.
+Carbohydrates eaten at a point in time, in grams, with a short description, and fat, protein and energy when an Estimate gave them. Logged on the phone or the Mac from a photo, a description, or both: Claude proposes an **Estimate**, the user confirms or edits the grams, and the confirmed figure is saved next to Claude's original one. The user can also skip the Estimate and type the grams. A saved Meal can be edited or deleted. A Meal is either **eaten** or a **Meal Plan**.
 _Avoid_: food log, entry, carbs (the number, not the event).
 
+**Meal Plan**:
+A Meal described before eating it, with the dose the user settled on, how much of it is logged, and (for a split dose) when to take the rest. Not eaten: it counts nowhere a Meal counts (graph, totals, Forecast, Learned Estimates, Apple Health) until the user taps **Eating Now**, which turns it into the eaten Meal with the same id, keeping the plan's numbers next to what was actually eaten.
+_Avoid_: draft, pending meal, future meal.
+
+**Suggested Dose**:
+The app's calculation of a Bolus for a Meal Plan: carbs ÷ carb ratio, plus (current glucose − target) ÷ insulin sensitivity (negative below target), minus Insulin on Board (never more than the first two add up to), never below zero, capped at the maximum single dose and rounded down to the pen step. Every part is shown. Withheld without Therapy Settings, a fresh Reading, during a Sensor State, at LO/HI, and when glucose is Low (treat the low first). A calculation for the user to check, never logged until they log the Dose. Its Insulin on Board counts only Doses in sugarbar, so the card always says so and offers to log an earlier Dose, in orange when the newest Glooko pen Dose is over 6 hours old and nothing was entered since.
+_Avoid_: recommendation, prescription, bolus advice.
+
+**Dose Settings**:
+What the Suggested Dose aims for and how it is rounded: target glucose (default 6.0 mmol/L), pen dose step (1 u or 0.5 u) and maximum single dose (default 15 u). Separate from Therapy Settings, which describe the body.
+_Avoid_: bolus settings, calculator settings.
+
+**Strategy**:
+Claude's short advice for a Meal Plan given the Suggested Dose, the Estimate and its absorption speed, current glucose and Trend, the Forecast and recent History: when to inject relative to eating, whether and how to split the dose, what to watch for, when to check again, and cautions. It may recommend a different amount only with a stated reason, and the app then shows both side by side. The app enforces the limits itself: an amount that is negative, off the pen step, above the maximum single dose, or more than 20% (or one pen step, whichever is larger) above the Suggested Dose is discarded with a caution saying so, and there is no Claude amount at all when the Suggested Dose is withheld.
+_Avoid_: plan (that is the Meal Plan), coaching.
+
 **Estimate**:
-Claude's proposed carb figure for a Meal photo and/or description, with the foods it identified, what it assumed, and a confidence. Never saved as-is — a starting point for the review step.
+Claude's proposed carb figure for a Meal photo and/or description, with fat, protein and energy, an absorption speed (fast, medium or slow), the foods it identified, what it assumed, and a confidence. Never saved as-is — a starting point for the review step; carbs are the number that matters.
 _Avoid_: result, answer, prediction.
 
 **History**:
@@ -109,8 +125,8 @@ The record of changes to sensitivity and carb ratio, each with its date, old and
 _Avoid_: history (that is History), audit trail.
 
 **Forecast**:
-Where glucose is predicted to head, in 5-minute points from the latest Reading until every Dose and Meal has finished acting (at least 3 hours): the summed effect of Bolus insulin, Meal carbs and recent momentum (the part of the recent slope that insulin and carbs do not explain). Carries the eventual (settled) value and the first predicted crossing of the low and high thresholds. Says where glucose is heading, never how much insulin to take. The graph draws the first 3 hours dashed past the latest Reading on the 4h, 12h and 24h Ranges.
-_Avoid_: prediction (fine in prose, not as a type), projection, dose advice.
+Where glucose is predicted to head, in 5-minute points from the latest Reading until every Dose and Meal has finished acting (at least 3 hours): the summed effect of Bolus insulin, Meal carbs and recent momentum (the part of the recent slope that insulin and carbs do not explain). Carries the eventual (settled) value and the first predicted crossing of the low and high thresholds. Says where glucose is heading; how much insulin to take is the separate **Suggested Dose**. The graph draws the first 3 hours dashed past the latest Reading on the 4h, 12h and 24h Ranges.
+_Avoid_: prediction (fine in prose, not as a type), projection.
 
 **Insulin on Board**:
 Bolus units still to act at a moment, from each Dose's exponential activity curve. Basal is not counted.
@@ -121,11 +137,11 @@ Grams of logged Meal carbs not yet absorbed at a moment, with each Meal absorbin
 _Avoid_: COB in UI text, active carbs.
 
 **History Summary**:
-The compact text account of recent **History**, **Doses**, **Meals**, thresholds, **Therapy Settings**, **Learned Estimates** and the **Change Log** that Ask Claude sends to Claude: the last 24 hours at 15-minute resolution with every event, one line per day, and a median-by-hour profile, in mmol/L and local time. Built once per conversation.
+The compact text account of recent **History**, **Doses**, **Meals** (with fat and protein, and open **Meal Plans** marked as not eaten), the dose calculation behind the **Suggested Dose**, thresholds, **Therapy Settings**, **Learned Estimates** and the **Change Log** that Ask Claude sends to Claude: the last 24 hours at 15-minute resolution with every event, one line per day, and a median-by-hour profile, in mmol/L and local time. Built once per conversation.
 _Avoid_: export, report, dump.
 
 **Ask Claude**:
-A chat with Claude about the user's own **History Summary**. Multi-turn within a session, held in memory only. Gives observations and things to discuss with a care team, never a dose for the future.
+A chat with Claude about the user's own **History Summary**. Multi-turn within a session, held in memory only. Gives observations and things to discuss with a care team, and may discuss dose amounts with reference to the app's Suggested Dose calculation and the user's working ratio and sensitivity, saying how uncertain they are.
 _Avoid_: assistant, coach, advice.
 
 ## Relationships
@@ -141,13 +157,15 @@ _Avoid_: assistant, coach, advice.
 - Doses are only as fresh as the last **Pen** sync — there is no Staleness notion for them.
 - A **Meal** is independent of any **Reading** or **Dose**; the graph overlays all three by time only.
 - An **Estimate** never becomes a **Meal** without a user review; the stored Meal is the user's figure, not Claude's.
+- A **Meal Plan** becomes at most one eaten **Meal** (same id). Logging a Dose from a plan records the units on the plan; the rest of a split dose shows as a reminder until logged.
+- A **Suggested Dose** needs complete **Therapy Settings**, a fresh in-range **Reading** above the low threshold, and the current **Insulin on Board**; the **Strategy** never replaces it, it sits beside it.
 - A **Forecast** needs complete **Therapy Settings** and a fresh **Reading**; there is none from a Stale Reading, a LO/HI Reading, or during a **Sensor State**.
 - A **Forecast** counts only **Bolus** Doses; **Basal** is assumed to cover background needs. A Pen Dose not yet synced to Glooko is missing from it unless it was entered as a **Manual Dose**, so a Forecast right after an unsynced, unentered Bolus reads too high.
 - Only eaten Meals with user-confirmed carbs count toward a **Meal Episode**.
 - A carb ratio is only learned given a sensitivity (the learned one when it has enough evidence, else the working one): one Meal Episode cannot separate the two.
 - A **Suggestion** changes **Therapy Settings** only when the user accepts it; every accepted or typed change goes in the **Change Log**.
 - An **Ask Claude** conversation is pinned to the **History Summary** built for its first question; Readings that arrive later are not in it until **Start Over**.
-- Meals live in each device's App Group (phone and widget; the Mac on its own). Phone Meals are mirrored to Apple Health, and editing or deleting one updates or removes its Health sample; Mac Meals are not. Until sync exists, a Meal logged on one device is not seen on the other. Nothing flows from Meals to Glooko.
+- Meals live in each device's App Group (phone and widget; the Mac on its own). Eaten phone Meals are mirrored to Apple Health (carbs, plus fat, protein and energy when known), and editing or deleting one updates or removes its Health samples; Meal Plans and Mac Meals are not. Until sync exists, a Meal logged on one device is not seen on the other. Nothing flows from Meals to Glooko.
 
 ## Example dialogue
 

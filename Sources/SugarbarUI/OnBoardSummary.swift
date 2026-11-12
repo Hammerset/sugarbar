@@ -14,8 +14,10 @@ public struct OnBoardSummary: View {
 
     public var body: some View {
         if let forecast {
-            Text("Insulin on board \(formatUnits(forecast.insulinOnBoard)) u · Carbs on board \(formatGrams(forecast.carbsOnBoard)) g")
-                .foregroundStyle(.secondary)
+            if forecast.insulinOnBoard >= 0.05 || forecast.carbsOnBoard >= 0.5 {
+                Text("Insulin on board \(formatUnits((forecast.insulinOnBoard * 10).rounded() / 10)) u · Carbs on board \(formatGrams(forecast.carbsOnBoard)) g")
+                    .foregroundStyle(.secondary)
+            }
         } else if !therapyComplete {
             Text("Enter Therapy Settings to see a forecast.")
                 .foregroundStyle(.tertiary)

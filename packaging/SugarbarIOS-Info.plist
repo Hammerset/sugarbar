@@ -50,8 +50,8 @@
     <key>NSPhotoLibraryUsageDescription</key>
     <string>Sugarbar reads the meal photos you pick so Claude can estimate their carbohydrates.</string>
     <key>NSHealthShareUsageDescription</key>
-    <string>Sugarbar does not read Health data; carbohydrates are only written.</string>
+    <string>Sugarbar does not read Health data; meal nutrition is only written.</string>
     <key>NSHealthUpdateUsageDescription</key>
-    <string>Sugarbar saves the carbohydrates of the meals you log to Apple Health.</string>
+    <string>Sugarbar saves the carbohydrates, fat, protein and energy of the meals you log to Apple Health.</string>
 </dict>
 </plist>

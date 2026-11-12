@@ -7,28 +7,66 @@ struct MealLogView: View {
     let model: GlucoseViewModel
     @Environment(\.dismiss) private var dismiss
 
+    @State private var mode: MealEntryMode
     @State private var draft = MealDraft()
     @State private var photoItem: PhotosPickerItem?
     @State private var showCamera = false
     @State private var isEstimating = false
     @State private var errorMessage: String?
+    @State private var isLoadingStrategy = false
+    @State private var strategyError: String?
+    @State private var doseDraft = DoseDraft()
+    @State private var showDoseLog = false
+    @State private var showTherapySettings = false
+    @State private var showEarlierDoseLog = false
+
+    init(model: GlucoseViewModel, mode: MealEntryMode = .log) {
+        self.model = model
+        _mode = State(initialValue: mode)
+    }
 
     var body: some View {
         NavigationStack {
             Form {
+                if draft.editing?.isEaten != true {
+                    Section {
+                        Picker("Mode", selection: $mode) {
+                            Text("Plan").tag(MealEntryMode.plan)
+                            Text("Eating now").tag(MealEntryMode.log)
+                        }
+                        .pickerStyle(.segmented)
+                    }
+                }
                 photoSection
                 estimateSection
                 reviewSection
+                if mode == .plan {
+                    MealPlanSections(
+                        draft: $draft,
+                        suggestion: model.doseSuggestion(carbs: draft.carbsGrams),
+                        pendingTherapySuggestions: model.therapySuggestions,
+                        doseCoverage: model.doseCoverage,
+                        penStep: model.settings.dosing.penStep,
+                        canAskClaude: model.hasClaudeAPIKey,
+                        isLoadingStrategy: isLoadingStrategy,
+                        strategyError: strategyError,
+                        onRequestStrategy: { Task { await runStrategy() } },
+                        onLogDose: openDoseLog,
+                        onSavePlan: { save(as: .planned) },
+                        onOpenTherapySettings: { showTherapySettings = true },
+                        onLogEarlierDose: { showEarlierDoseLog = true }
+                    )
+                }
                 recentSection
             }
-            .navigationTitle(draft.editing == nil ? "Log Meal" : "Edit Meal")
+            .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") { save() }
+                    Button(mode == .plan ? "Save Plan" : "Save") { save(as: mode == .plan ? .planned : .eaten) }
                         .disabled(!draft.isValid)
                 }
             }
@@ -44,7 +82,24 @@ struct MealLogView: View {
                 }
                 .ignoresSafeArea()
             }
+            .sheet(isPresented: $showTherapySettings, onDismiss: model.reloadSettings) {
+                TherapySettingsView(model: model)
+            }
+            .sheet(isPresented: $showEarlierDoseLog) {
+                DoseLogView(model: model)
+            }
+            .sheet(isPresented: $showDoseLog) {
+                DoseLogView(model: model, initialDraft: doseDraft) { dose in
+                    Task { await doseLogged(dose) }
+                }
+            }
         }
+    }
+
+    private var title: String {
+        if mode == .plan { return draft.isEditingPlan ? "Edit Plan" : "Plan Meal" }
+        if draft.isEditingPlan { return "Eating Now" }
+        return draft.editing == nil ? "Log Meal" : "Edit Meal"
     }
 
     private var photoSection: some View {
@@ -80,13 +135,13 @@ struct MealLogView: View {
                     if isEstimating {
                         ProgressView().frame(maxWidth: .infinity)
                     } else {
-                        Text(draft.estimate == nil ? "Estimate Carbs with Claude" : "Estimate Again")
+                        Text(draft.estimate == nil ? "Estimate with Claude" : "Estimate Again")
                             .frame(maxWidth: .infinity)
                     }
                 }
                 .disabled(!draft.canEstimate || isEstimating)
             } else {
-                Text("Add a Claude API key in the Meals card to get an Estimate. You can still type the grams yourself.")
+                Text("Add a Claude API key in the Meals card to get an Estimate and a dose strategy. You can still type the grams yourself.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -103,7 +158,7 @@ struct MealLogView: View {
 
     private var reviewSection: some View {
         Section {
-            MealReviewFields(draft: $draft)
+            MealReviewFields(draft: $draft, mode: mode)
         } footer: {
             Text(MealReviewFields.note)
         }
@@ -115,24 +170,31 @@ struct MealLogView: View {
         if !recent.isEmpty {
             Section {
                 ForEach(recent) { meal in
-                    Button {
-                        draft = MealDraft(editing: meal)
-                        errorMessage = nil
-                    } label: {
-                        Text(mealSummaryLine(meal))
-                            .foregroundStyle(meal.id == draft.editing?.id ? Color.accentColor : .primary)
+                    HStack {
+                        Button {
+                            start(MealDraft(editing: meal), mode: meal.isPlanned ? .plan : .log)
+                        } label: {
+                            Text(mealSummaryLine(meal))
+                                .foregroundStyle(meal.id == draft.editing?.id ? Color.accentColor : .primary)
+                        }
+                        if meal.isPlanned {
+                            Spacer()
+                            Button("Eating Now") { start(MealDraft(eating: meal), mode: .log) }
+                                .buttonStyle(.bordered)
+                        }
                     }
+                    .buttonStyle(.borderless)
                 }
                 .onDelete { offsets in
                     for meal in offsets.map({ recent[$0] }) {
                         Task { await model.deleteMeal(meal) }
-                        if meal.id == draft.editing?.id { draft = MealDraft() }
+                        if meal.id == draft.editing?.id { start(MealDraft(), mode: mode) }
                     }
                 }
             } header: {
-                Text("Recent Meals")
+                Text("Plans and Recent Meals")
             } footer: {
-                Text("Tap to edit, swipe to delete. Editing or deleting a meal also updates its Apple Health entry.")
+                Text("Tap to edit, swipe to delete. A plan becomes the eaten Meal when you tap Eating Now. Editing or deleting an eaten meal also updates its Apple Health entry.")
             }
         }
     }
@@ -153,8 +215,46 @@ struct MealLogView: View {
         }
     }
 
-    private func save() {
-        guard let meal = draft.meal() else { return }
+    private func start(_ newDraft: MealDraft, mode newMode: MealEntryMode) {
+        draft = newDraft
+        mode = newMode
+        errorMessage = nil
+        strategyError = nil
+    }
+
+    private func runStrategy() async {
+        isLoadingStrategy = true
+        strategyError = nil
+        defer { isLoadingStrategy = false }
+        do {
+            let strategy = try await model.mealStrategy(for: draft, suggestion: model.doseSuggestion(carbs: draft.carbsGrams))
+            draft.apply(strategy, penStep: model.settings.dosing.penStep)
+        } catch {
+            logDiagnostic("mealStrategy", error)
+            strategyError = error.sugarbarMessage
+        }
+    }
+
+    private func openDoseLog() {
+        var dose = DoseDraft()
+        dose.units = draft.unitsToLogNow
+        dose.kind = .bolus
+        doseDraft = dose
+        showDoseLog = true
+    }
+
+    /// Logging part of the plan's dose keeps the plan, so what is left stays visible as a reminder.
+    private func doseLogged(_ dose: InsulinDose) async {
+        guard dose.kind == .bolus else { return }
+        draft.takenUnits += dose.units
+        let state: MealState = draft.editing?.isEaten == true ? .eaten : .planned
+        guard let meal = draft.meal(state: state) else { return }
+        await model.saveMeal(meal)
+        draft.markSaved(meal)
+    }
+
+    private func save(as state: MealState) {
+        guard let meal = draft.meal(state: state) else { return }
         Task { await model.saveMeal(meal) }
         dismiss()
     }

@@ -244,4 +244,11 @@ private func relativeError(_ value: Double?, _ truth: Double) -> Double {
         #expect(accepted.therapyLearning.dismissed[.carbRatio] == nil)
         #expect(accepted.visibleSuggestions(later).isEmpty)
     }
+
+    @Test func plannedMealsAreNotEvidenceUntilEaten() {
+        let date = Date(timeIntervalSince1970: 1_794_488_820)
+        #expect(mealCountsAsEvidence(Meal(timestamp: date, carbsGrams: 60, summary: "Pizza")))
+        #expect(!mealCountsAsEvidence(Meal(timestamp: date, carbsGrams: 60, summary: "Pizza", state: .planned)))
+        #expect(!mealCountsAsEvidence(Meal(timestamp: date, carbsGrams: 0, summary: "Coffee")))
+    }
 }
