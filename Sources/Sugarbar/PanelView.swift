@@ -19,6 +19,14 @@ struct PanelView: View {
             header
             OnBoardSummary(forecast: model.forecast, therapyComplete: model.settings.therapy.isComplete)
                 .font(.caption)
+            ForEach(model.therapySuggestions, id: \.quantity) { suggestion in
+                TherapySuggestionRow(
+                    suggestion: suggestion,
+                    onAccept: { model.acceptSuggestion(suggestion) },
+                    onDismiss: { model.dismissSuggestion(suggestion) }
+                )
+                .font(.caption)
+            }
             chart
             insulinLine
             if showsDoseEntry {

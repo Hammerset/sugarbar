@@ -126,6 +126,13 @@ func syntheticHistory(days: Int, now: Date) -> (readings: [Reading], doses: [Ins
         #expect(text.contains("Insulin on Board 2.3 u, Carbs on Board 18 g, settling around 6.4, predicted above 10.0 at 14:17."))
     }
 
+    @Test func saysWhenTheCarbRatioCannotBeLearnedYet() {
+        let estimate = TherapyEstimate(computedAt: now, sensitivity: nil, carbRatio: nil, carbRatioBasis: nil, unresolvedMealEpisodes: 9, rejections: [:], suggestions: [])
+        let text = historySummary(readings: [], doses: [], meals: [], thresholds: .standard, therapy: .default, therapyEstimate: estimate, now: now, days: 1, timeZone: oslo)
+        #expect(text.contains("- insulin sensitivity: no clean correction episodes yet"))
+        #expect(text.contains("- carb ratio: not identifiable yet; 9 clean meal episodes but no sensitivity"))
+    }
+
     @Test func lowEpisodesMergeShortGaps() {
         let base = Date(timeIntervalSince1970: 0)
         func reading(_ minutes: Double, _ value: Double) -> Reading {

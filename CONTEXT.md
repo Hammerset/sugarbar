@@ -89,8 +89,24 @@ The share of a Range spent in each Band. Counted in five-minute slots, so a minu
 _Avoid_: TIR in UI copy, score, compliance.
 
 **Therapy Settings**:
-The user's personal factors the Forecast needs: insulin sensitivity (mmol/L one unit of Bolus lowers glucose), carb ratio (grams one unit covers), and insulin duration, insulin peak and carb absorption time. Sensitivity and carb ratio have no defaults; the timings default to 6 h, 75 min and 3 h.
+The user's personal factors the Forecast needs: insulin sensitivity (mmol/L one unit of Bolus lowers glucose), carb ratio (grams one unit covers), and insulin duration, insulin peak and carb absorption time. Sensitivity and carb ratio are working values: typed in, or accepted from a **Suggestion**, and kept up to date with the user as they drift. They have no defaults; the timings default to 6 h, 75 min and 3 h.
 _Avoid_: profile, factors, ISF/ICR in UI text.
+
+**Episode**:
+A stretch of History clean enough to learn Therapy Settings from: one Bolus (or several within 45 minutes) and glucose known shortly before and at the end, once the carbs are absorbed and little of the insulin is still to act. A **Correction Episode** has no Meal and starts above range; it measures sensitivity. A **Meal Episode** has logged Meal carbs; given a sensitivity it measures the carb ratio. Episodes with another Meal, a treated low, or a rise no logged Meal explains are skipped.
+_Avoid_: event, window, sample.
+
+**Learned Estimate**:
+The sensitivity or carb ratio the app infers from recent Episodes, newer ones weighing more, with the evidence behind it (Episodes used, effective sample size, spread) and a time-of-day breakdown. Never applied by itself.
+_Avoid_: prediction, recommendation, auto-tune.
+
+**Suggestion**:
+An offer to change a working Therapy Setting to its Learned Estimate, shown when the evidence is strong enough and the estimate differs from the working value by more than 10% (or there is none yet). Accept writes it; Dismiss hides it until the estimate moves again.
+_Avoid_: recommendation, advice, alert.
+
+**Change Log**:
+The record of changes to sensitivity and carb ratio, each with its date, old and new value, and where it came from (a Suggestion's evidence, or entered by hand). Kept with the settings.
+_Avoid_: history (that is History), audit trail.
 
 **Forecast**:
 Where glucose is predicted to head, in 5-minute points from the latest Reading until every Dose and Meal has finished acting (at least 3 hours): the summed effect of Bolus insulin, Meal carbs and recent momentum (the part of the recent slope that insulin and carbs do not explain). Carries the eventual (settled) value and the first predicted crossing of the low and high thresholds. Says where glucose is heading, never how much insulin to take. The graph draws the first 3 hours dashed past the latest Reading on the 4h, 12h and 24h Ranges.
@@ -105,7 +121,7 @@ Grams of logged Meal carbs not yet absorbed at a moment, with each Meal absorbin
 _Avoid_: COB in UI text, active carbs.
 
 **History Summary**:
-The compact text account of recent **History**, **Doses**, **Meals**, thresholds and **Therapy Settings** that Ask Claude sends to Claude: the last 24 hours at 15-minute resolution with every event, one line per day, and a median-by-hour profile, in mmol/L and local time. Built once per conversation.
+The compact text account of recent **History**, **Doses**, **Meals**, thresholds, **Therapy Settings**, **Learned Estimates** and the **Change Log** that Ask Claude sends to Claude: the last 24 hours at 15-minute resolution with every event, one line per day, and a median-by-hour profile, in mmol/L and local time. Built once per conversation.
 _Avoid_: export, report, dump.
 
 **Ask Claude**:
@@ -127,6 +143,9 @@ _Avoid_: assistant, coach, advice.
 - An **Estimate** never becomes a **Meal** without a user review; the stored Meal is the user's figure, not Claude's.
 - A **Forecast** needs complete **Therapy Settings** and a fresh **Reading**; there is none from a Stale Reading, a LO/HI Reading, or during a **Sensor State**.
 - A **Forecast** counts only **Bolus** Doses; **Basal** is assumed to cover background needs. A Pen Dose not yet synced to Glooko is missing from it unless it was entered as a **Manual Dose**, so a Forecast right after an unsynced, unentered Bolus reads too high.
+- Only eaten Meals with user-confirmed carbs count toward a **Meal Episode**.
+- A carb ratio is only learned given a sensitivity (the learned one when it has enough evidence, else the working one): one Meal Episode cannot separate the two.
+- A **Suggestion** changes **Therapy Settings** only when the user accepts it; every accepted or typed change goes in the **Change Log**.
 - An **Ask Claude** conversation is pinned to the **History Summary** built for its first question; Readings that arrive later are not in it until **Start Over**.
 - Meals live in each device's App Group (phone and widget; the Mac on its own). Phone Meals are mirrored to Apple Health, and editing or deleting one updates or removes its Health sample; Mac Meals are not. Until sync exists, a Meal logged on one device is not seen on the other. Nothing flows from Meals to Glooko.
 
