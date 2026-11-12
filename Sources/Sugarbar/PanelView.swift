@@ -8,6 +8,7 @@ struct PanelView: View {
     var onAskClaude: () -> Void = {}
     @State private var window: HistoryWindow = .fourHours
     @State private var selectedDate: Date?
+    @State private var showsDoseEntry = false
 
     private var thresholds: Thresholds { model.thresholds }
     private var series: [Reading] { model.chartSeries(window: window) }
@@ -17,6 +18,9 @@ struct PanelView: View {
             header
             chart
             insulinLine
+            if showsDoseEntry {
+                DoseEntrySection(model: model, isPresented: $showsDoseEntry)
+            }
             rangePicker
             TimeInRangeView(summary: timeInRange(series, thresholds: thresholds))
             Divider()
@@ -87,7 +91,7 @@ struct PanelView: View {
             Text("Glooko: \(error)")
                 .font(.caption)
                 .foregroundStyle(.orange)
-        } else if model.glookoAccountEmail != nil {
+        } else if model.glookoAccountEmail != nil || !model.chartDoses(window: window).isEmpty {
             let totals = insulinTotals(model.chartDoses(window: window))
             Text("Insulin \(window.label) · bolus \(formatUnits(totals.bolus)) u · basal \(formatUnits(totals.basal)) u")
                 .font(.caption)
@@ -118,6 +122,8 @@ struct PanelView: View {
                 .buttonStyle(.borderless)
                 .help("Settings")
                 .accessibilityLabel("Settings")
+                Button("Log Dose", systemImage: "syringe") { showsDoseEntry.toggle() }
+                    .buttonStyle(.borderless)
                 Button("Ask Claude", systemImage: "bubble.left.and.text.bubble.right", action: onAskClaude)
                     .buttonStyle(.borderless)
                 Spacer()
