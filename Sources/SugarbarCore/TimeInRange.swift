@@ -1,31 +1,32 @@
-public struct TimeInRangeSummary: Equatable, Sendable {
-    public let inRangePercent: Double
-    public let lowPercent: Double
-    public let highPercent: Double
+import Foundation
 
-    public init(inRangePercent: Double, lowPercent: Double, highPercent: Double) {
-        self.inRangePercent = inRangePercent
-        self.lowPercent = lowPercent
-        self.highPercent = highPercent
+public struct TimeInRangeSummary: Equatable, Sendable {
+    public let percentByBand: [Band: Double]
+
+    public init(percentByBand: [Band: Double]) {
+        self.percentByBand = percentByBand
     }
+
+    public func percent(_ band: Band) -> Double { percentByBand[band] ?? 0 }
+
+    public var inRangePercent: Double { percent(.inRange) }
+    public var lowPercent: Double { percent(.urgentLow) + percent(.low) }
+    public var highPercent: Double { percent(.high) + percent(.urgentHigh) }
 }
+
+/// Live Readings arrive every minute and backfilled ones every five, so each slot counts once.
+public let timeInRangeSlot: TimeInterval = 5 * 60
 
 public func timeInRange(_ readings: [Reading], thresholds: Thresholds = .standard) -> TimeInRangeSummary? {
     guard !readings.isEmpty else { return nil }
-    var inRange = 0
-    var low = 0
-    var high = 0
-    for reading in readings {
-        switch Band(mmolPerL: reading.value, thresholds: thresholds) {
-        case .inRange: inRange += 1
-        case .low, .urgentLow: low += 1
-        case .high, .urgentHigh: high += 1
+    let slots = Dictionary(grouping: readings) { Int(floor($0.timestamp.timeIntervalSince1970 / timeInRangeSlot)) }
+    var weights: [Band: Double] = [:]
+    for slotReadings in slots.values {
+        let counts = Dictionary(grouping: slotReadings) { Band(mmolPerL: $0.value, thresholds: thresholds) }
+        for (band, members) in counts {
+            weights[band, default: 0] += Double(members.count) / Double(slotReadings.count)
         }
     }
-    let total = Double(readings.count)
-    return TimeInRangeSummary(
-        inRangePercent: Double(inRange) / total * 100,
-        lowPercent: Double(low) / total * 100,
-        highPercent: Double(high) / total * 100
-    )
+    let total = Double(slots.count)
+    return TimeInRangeSummary(percentByBand: weights.mapValues { $0 / total * 100 })
 }

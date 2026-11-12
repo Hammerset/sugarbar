@@ -36,7 +36,8 @@ struct TrendsView: View {
                         thresholds: thresholds,
                         latest: model.latest,
                         valueTint: model.content.tint,
-                        xDomain: xDomain,
+                        xDomain: window.interval(endingAt: model.now),
+                        markerBucket: window.markerBucket,
                         selectedDate: $selectedDate
                     )
                     windowPicker
@@ -126,7 +127,7 @@ struct TrendsView: View {
     private var windowPicker: some View {
         Picker("Window", selection: $window) {
             ForEach(HistoryWindow.allCases) { window in
-                Text("\(window.hours)h").tag(window)
+                Text(window.label).tag(window)
             }
         }
         .pickerStyle(.segmented)
@@ -136,19 +137,9 @@ struct TrendsView: View {
     @ViewBuilder
     private var timeInRangeCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Time in Range")
+            Text("Time in Range · \(window.label)")
                 .font(.headline)
-            if let summary = timeInRange(series, thresholds: thresholds) {
-                HStack(spacing: 0) {
-                    timeInRangeStat(label: "Low", percent: summary.lowPercent, tint: Band.low.tint)
-                    timeInRangeStat(label: "In Range", percent: summary.inRangePercent, tint: Band.inRange.tint)
-                    timeInRangeStat(label: "High", percent: summary.highPercent, tint: Band.high.tint)
-                }
-            } else {
-                Text("Not enough data yet")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-            }
+            TimeInRangeView(summary: timeInRange(series, thresholds: thresholds))
         }
     }
 
@@ -188,7 +179,7 @@ struct TrendsView: View {
             Text("Meals")
                 .font(.headline)
             if model.hasClaudeAPIKey {
-                Text("\(formatGrams(carbTotal(model.chartMeals(window: window)))) g carbs logged in the last \(window.hours)h")
+                Text("\(formatGrams(carbTotal(model.chartMeals(window: window)))) g carbs logged in the last \(window.label)")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                 if let error = model.healthKitError {
@@ -222,22 +213,5 @@ struct TrendsView: View {
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
-    }
-
-    private func timeInRangeStat(label: String, percent: Double, tint: Color) -> some View {
-        VStack(spacing: 4) {
-            Text("\(Int(percent.rounded()))%")
-                .font(.title2.bold())
-                .foregroundStyle(tint)
-            Text(label)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity)
-    }
-
-    private var xDomain: ClosedRange<Date> {
-        let end = model.now
-        return end.addingTimeInterval(-Double(window.hours) * 3600)...end
     }
 }

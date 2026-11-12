@@ -1,10 +1,12 @@
 # sugarbar
 
-A native macOS menu-bar app — and a minimal iOS companion app — that shows your FreeStyle Libre 3 glucose: latest value + trend, colour-coded against a 5-band reference scale, with a recent-history graph in a click-through panel (macOS) or a full-screen reading (iOS).
+A native macOS menu-bar app — and a minimal iOS companion app — that shows your FreeStyle Libre 3 glucose: latest value + trend, colour-coded against a 5-band reference scale, with a history graph in a click-through panel (macOS) or a full-screen reading (iOS).
+
+Every poll is kept in a local history, so the graph goes back further than the ~12 hours LibreLinkUp returns: pick a range from 4 hours to 90 days, with time-in-range per band for the selected range on both platforms.
 
 Reads from the unofficial **LibreLinkUp** API as a Follower. A LibreLinkUp account that receives a share from the phone running the Libre app is a prerequisite.
 
-Optionally overlays insulin doses from a **Glooko** account — connected-pen boluses and manually logged basal — as markers along the history graph, with per-window bolus/basal totals. This rides Glooko's internal web API (no public API exists), so it's best-effort too.
+Optionally overlays insulin doses from a **Glooko** account — connected-pen boluses and manually logged basal — as markers along the history graph, with per-range bolus/basal totals. Glooko also holds the LibreLink CGM stream, so signing in backfills the history with the past 90 days of readings and doses, and keeps filling any gaps from times the app wasn't running. This rides Glooko's internal web API (no public API exists), so it's best-effort too.
 
 The iOS app can also log **meals** from a photo: Claude (Sonnet 5.5, via your own pay-per-use API key) estimates the carbohydrates, you review and adjust the grams, and the meal is saved alongside the glucose history and written to Apple Health. Meals show as markers on the graph on both platforms.
 
@@ -90,7 +92,7 @@ swift test
 |---|---|
 | `project.yml` | XcodeGen spec for the Xcode project — the macOS app, iOS app, and widget extension targets. The `.xcodeproj` is generated from this, not committed. |
 | `Package.swift` | SwiftPM package exposing the `SugarbarCore`/`SugarbarUI` libraries consumed by both app targets. Source of truth for the core; `swift test` runs against it. |
-| `Sources/SugarbarCore/` | Source-agnostic domain + the LibreLinkUp client (auth, region redirect, fetch, polling, staleness), the Glooko client (web sign-in, dose fetch), and the meal analyzer (one Claude Messages API call, lenient JSON parsing). No AppKit/UIKit. |
+| `Sources/SugarbarCore/` | Source-agnostic domain + the LibreLinkUp client (auth, region redirect, fetch, polling, staleness), the Glooko client (web sign-in, CGM + dose fetch, backfill), the file-backed history store, and the meal analyzer (one Claude Messages API call, lenient JSON parsing). No AppKit/UIKit. |
 | `Sources/SugarbarUI/` | Shared SwiftUI presentation (band colours, `BarContent` text/glyph/tint, the history chart) consumed by both app targets. |
 | `Sources/Sugarbar/` | The macOS app: menu-bar item, SwiftUI panel, settings, view model, app lifecycle. Built by the `Sugarbar` Xcode target. |
 | `Sources/SugarbarIOS/` | The iOS app: sign-in, foreground polling, best-effort `BGAppRefreshTask` background top-up, current-reading screen, meal photo logging (camera/library, Claude estimate, review, HealthKit write), App Group snapshot + WidgetKit reload. Built by the `SugarbarIOS` Xcode target. |
@@ -107,4 +109,7 @@ swift test
 - **Credentials are per-app:** each app target keeps its own LibreLinkUp Keychain entry (Phase 1, [#23](https://github.com/Hammerset/sugarbar/issues/23)) — signing in on the Mac app doesn't sign in the iOS app, and vice versa. Settings (thresholds, poll cadence, selected connection) and the latest snapshot *are* shared via the App Group.
 - **API churn:** this rides an undocumented API. If Abbott bumps the LibreLinkUp app version, calls may start failing (`430`) until the `version` header in `LibreLinkUpClient` is updated. Likewise `GlookoClient` scrapes the Glooko web app's sign-in form and calls its dashboard JSON endpoint; a Glooko web redesign can break it.
 - **Meals:** stored as JSON in the App Group (`shared.meals`) — that is what the graph reads on both platforms. Each saved meal is also written to Apple Health as a `dietaryCarbohydrates` sample; Health is write-only and Glooko does not import carbs from Health, so meals never reach Glooko.
+- **History:** month files under `History/` — `readings-YYYY-MM.tsv` (one `epoch<TAB>mmol/L<TAB>trend` line per reading) and `doses-YYYY-MM.jsonl` — appended to on each poll and read a month at a time, never pruned. On iOS they live in the App Group container; the Mac app uses `~/Library/Application Support/Sugarbar/History` because its ad-hoc signature doesn't get the group container. History is per device (no sync) and is not cleared by signing out.
+- **Glooko backfill:** `GET /api/v3/graph/data` with series `cgmLow`/`cgmNormal`/`cgmHigh` returns 5-minute CGM points whose `value` is mg/dL × 100 (`100` and `200100` are the sensor's LO/HI clamps), with no trend; points flagged `calculated` are skipped. The first sync asks for 90 days in 7-day requests; later syncs resume an hour before the newest Glooko reading seen (a cursor file next to the history), always covering the last 24 hours for late pen syncs. Glooko's CGM data trails the sensor by a few hours.
+- **Long ranges:** past 24 hours dose and meal markers are pooled (per 6 h for 3d, per day up to 30d, per week for 90d) and lose their inline labels — hover for totals. Past 7 days the line becomes a low–high band with its mean.
 - **Dose timing:** Glooko only learns about a pen dose when the pen is synced to the Glooko app over NFC, so doses show up with that delay. Glooko is polled every 5 minutes, not on the sensor cadence.

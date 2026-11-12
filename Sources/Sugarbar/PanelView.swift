@@ -9,6 +9,7 @@ struct PanelView: View {
     @State private var selectedDate: Date?
 
     private var thresholds: Thresholds { model.thresholds }
+    private var series: [Reading] { model.chartSeries(window: window) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -16,6 +17,7 @@ struct PanelView: View {
             chart
             insulinLine
             rangePicker
+            TimeInRangeView(summary: timeInRange(series, thresholds: thresholds))
             Divider()
             footer
         }
@@ -66,13 +68,14 @@ struct PanelView: View {
 
     private var chart: some View {
         GlucoseHistoryChart(
-            series: model.chartSeries(window: window),
+            series: series,
             doses: model.chartDoses(window: window),
             meals: model.chartMeals(window: window),
             thresholds: thresholds,
             latest: model.latest,
             valueTint: valueTint,
-            xDomain: xDomain,
+            xDomain: window.interval(endingAt: model.now),
+            markerBucket: window.markerBucket,
             selectedDate: $selectedDate
         )
     }
@@ -85,7 +88,7 @@ struct PanelView: View {
                 .foregroundStyle(.orange)
         } else if model.glookoAccountEmail != nil {
             let totals = insulinTotals(model.chartDoses(window: window))
-            Text("Insulin \(window.hours)h · bolus \(formatUnits(totals.bolus)) u · basal \(formatUnits(totals.basal)) u")
+            Text("Insulin \(window.label) · bolus \(formatUnits(totals.bolus)) u · basal \(formatUnits(totals.basal)) u")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -94,7 +97,7 @@ struct PanelView: View {
     private var rangePicker: some View {
         Picker("Range", selection: $window) {
             ForEach(HistoryWindow.allCases) { window in
-                Text("\(window.hours)h").tag(window)
+                Text(window.label).tag(window)
             }
         }
         .pickerStyle(.segmented)
@@ -145,10 +148,5 @@ struct PanelView: View {
             case nil: return nil
             }
         }
-    }
-
-    private var xDomain: ClosedRange<Date> {
-        let end = model.now
-        return end.addingTimeInterval(-Double(window.hours) * 3600)...end
     }
 }
