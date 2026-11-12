@@ -43,13 +43,15 @@ struct MealLogWindow: View {
                     MealPlanSections(
                         draft: $draft,
                         suggestion: model.doseSuggestion(carbs: draft.carbsGrams),
+                        pendingTherapySuggestions: model.therapySuggestions,
                         penStep: model.settings.dosing.penStep,
                         canAskClaude: model.hasClaudeAPIKey,
                         isLoadingStrategy: isLoadingStrategy,
                         strategyError: strategyError,
                         onRequestStrategy: { Task { await runStrategy() } },
                         onLogDose: openDoseEntry,
-                        onSavePlan: { save(as: .planned) }
+                        onSavePlan: { save(as: .planned) },
+                        onOpenTherapySettings: onOpenSettings
                     )
                     if doseDraft != nil { doseSection }
                 }

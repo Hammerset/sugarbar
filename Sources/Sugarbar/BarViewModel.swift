@@ -16,6 +16,8 @@ final class BarViewModel {
     private(set) var meals: [Meal] = []
     private(set) var hasClaudeAPIKey = false
     private(set) var forecast: Forecast?
+    private(set) var therapyEstimate: TherapyEstimate?
+    private(set) var isEstimatingTherapy = false
 
     private let credentialStore: CredentialStore
     private let glookoCredentialStore: CredentialStore
@@ -198,6 +200,43 @@ final class BarViewModel {
         if needsRestart { restart() }
     }
 
+    var therapySuggestions: [TherapySuggestion] {
+        settings.visibleSuggestions(therapyEstimate)
+    }
+
+    func refreshTherapyEstimateIfDue() {
+        if let therapyEstimate, Date().timeIntervalSince(therapyEstimate.computedAt) < therapyEstimateInterval { return }
+        recomputeTherapyEstimate()
+    }
+
+    func recomputeTherapyEstimate() {
+        guard !isEstimatingTherapy else { return }
+        isEstimatingTherapy = true
+        let history = historyStore
+        let meals = mealStore.load()
+        let settings = settings
+        Task {
+            therapyEstimate = await Task.detached(priority: .utility) {
+                estimateTherapy(history: history, meals: meals, settings: settings)
+            }.value
+            isEstimatingTherapy = false
+        }
+    }
+
+    func acceptSuggestion(_ suggestion: TherapySuggestion) {
+        applySettings(settings.accepting(suggestion, at: Date()))
+        recomputeTherapyEstimate()
+    }
+
+    func dismissSuggestion(_ suggestion: TherapySuggestion) {
+        applySettings(settings.dismissing(suggestion))
+    }
+
+    func saveTherapy(_ therapy: TherapySettings) {
+        applySettings(settings.editingTherapy(therapy, at: Date()))
+        recomputeTherapyEstimate()
+    }
+
     func acknowledgeDisclaimer() {
         var updated = settings
         updated.disclaimerAcknowledged = true
@@ -277,6 +316,7 @@ final class BarViewModel {
         refreshForecast()
         await alerter.evaluate(latest: latest, sensorActivation: sensorActivation, forecast: forecast, now: now)
         Task { await refreshDosesIfDue() }
+        refreshTherapyEstimateIfDue()
         return outcome
     }
 

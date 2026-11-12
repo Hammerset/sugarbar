@@ -5,6 +5,7 @@ import SugarbarCore
 public struct MealPlanSections: View {
     @Binding var draft: MealDraft
     let suggestion: DoseSuggestion
+    let pendingTherapySuggestions: [TherapySuggestion]
     let penStep: Double
     let canAskClaude: Bool
     let isLoadingStrategy: Bool
@@ -12,20 +13,24 @@ public struct MealPlanSections: View {
     let onRequestStrategy: () -> Void
     let onLogDose: () -> Void
     let onSavePlan: () -> Void
+    let onOpenTherapySettings: () -> Void
 
     public init(
         draft: Binding<MealDraft>,
         suggestion: DoseSuggestion,
+        pendingTherapySuggestions: [TherapySuggestion] = [],
         penStep: Double,
         canAskClaude: Bool,
         isLoadingStrategy: Bool,
         strategyError: String?,
         onRequestStrategy: @escaping () -> Void,
         onLogDose: @escaping () -> Void,
-        onSavePlan: @escaping () -> Void
+        onSavePlan: @escaping () -> Void,
+        onOpenTherapySettings: @escaping () -> Void
     ) {
         _draft = draft
         self.suggestion = suggestion
+        self.pendingTherapySuggestions = pendingTherapySuggestions
         self.penStep = penStep
         self.canAskClaude = canAskClaude
         self.isLoadingStrategy = isLoadingStrategy
@@ -33,11 +38,23 @@ public struct MealPlanSections: View {
         self.onRequestStrategy = onRequestStrategy
         self.onLogDose = onLogDose
         self.onSavePlan = onSavePlan
+        self.onOpenTherapySettings = onOpenTherapySettings
     }
 
     public var body: some View {
         Section {
             SuggestedDoseRows(suggestion: suggestion)
+            ForEach(pendingTherapySuggestions, id: \.quantity) { pending in
+                Label {
+                    Text("Not used yet: " + pending.text)
+                } icon: {
+                    Image(systemName: "lightbulb").foregroundStyle(.orange)
+                }
+                .font(.footnote)
+            }
+            if !pendingTherapySuggestions.isEmpty || suggestion.withheldReasons.contains(.noTherapySettings) {
+                Button("Open Therapy Settings", action: onOpenTherapySettings)
+            }
         } header: {
             Text("Suggested Dose")
         } footer: {
@@ -140,6 +157,9 @@ public struct SuggestedDoseRows: View {
             part("Meal", "\(formatGrams(dose.carbsGrams)) g ÷ \(number(dose.carbRatio)) g/u", dose.mealUnits)
             part("Correction", "(\(formatMmolPerL(dose.currentGlucose)) − \(formatMmolPerL(dose.targetGlucose))) ÷ \(number(dose.insulinSensitivity))", dose.correctionUnits)
             part("Insulin on board", "of \(String(format: "%.1f", dose.insulinOnBoard)) u", -dose.insulinOnBoardDeduction)
+            Text("Using your Therapy Settings: carb ratio \(number(dose.carbRatio)) g per unit, insulin sensitivity \(number(dose.insulinSensitivity)) mmol/L per unit, target \(formatMmolPerL(dose.targetGlucose)).")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
             Text(roundingLine(dose))
                 .font(.footnote)
                 .foregroundStyle(dose.wasCapped ? .orange : .secondary)

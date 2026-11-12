@@ -19,6 +19,8 @@ public func historySummary(
     therapy: TherapySettings,
     dosing: DosingSettings? = nil,
     forecast: Forecast? = nil,
+    therapyEstimate: TherapyEstimate? = nil,
+    therapyChanges: [TherapyChange] = [],
     now: Date,
     days: Int = defaultSummaryDays,
     timeZone: TimeZone = .current
@@ -33,6 +35,8 @@ public func historySummary(
         therapy: therapy,
         dosing: dosing,
         forecast: forecast,
+        therapyEstimate: therapyEstimate,
+        therapyChanges: therapyChanges,
         now: now,
         span: span,
         days: max(days, 1),
@@ -51,6 +55,8 @@ public func historySummary(history: HistoryStore, meals: [Meal], settings: Setti
         therapy: settings.therapy,
         dosing: settings.dosing,
         forecast: forecast,
+        therapyEstimate: estimateTherapy(history: history, meals: meals, settings: settings, now: now),
+        therapyChanges: settings.therapyLearning.changes,
         now: now,
         days: days
     )
@@ -93,6 +99,8 @@ private struct SummaryBuilder {
     let therapy: TherapySettings
     let dosing: DosingSettings?
     let forecast: Forecast?
+    let therapyEstimate: TherapyEstimate?
+    let therapyChanges: [TherapyChange]
     let now: Date
     let span: ClosedRange<Date>
     let days: Int
@@ -113,6 +121,9 @@ private struct SummaryBuilder {
             "Units: glucose mmol/L, insulin units (u), carbohydrate grams (g). All times are local, time zone \(timeZone.identifier) (\(utc)).",
             "Bands: urgent low <\(mmol(thresholds.urgentLow)), low <\(mmol(thresholds.low)), in range \(mmol(thresholds.low))–\(mmol(thresholds.high)), high >\(mmol(thresholds.high)), urgent high >\(mmol(thresholds.urgentHigh)).",
             "Therapy settings: \(therapyLine()).",
+        ]
+        lines += learnedLines()
+        lines += [
             "Sources: Readings from a FreeStyle Libre 3 CGM (1-minute live, 5-minute backfill). Doses from Glooko: pen Doses only appear after the pen is synced over NFC, so recent Doses may be missing unless the user entered them in sugarbar (marked as such; Glooko's copy replaces them once synced). Meals only if the user logged them in the app. Basal Doses are long-acting insulin.",
         ]
         if let dosing {
@@ -143,6 +154,47 @@ private struct SummaryBuilder {
         parts.append("insulin duration \(number(therapy.insulinDuration / 3600)) h, peak \(Int(therapy.insulinPeak / 60)) min")
         parts.append("carb absorption \(number(therapy.carbAbsorptionTime / 3600)) h")
         return parts.joined(separator: "; ")
+    }
+
+    private func learnedLines() -> [String] {
+        var lines: [String] = []
+        if let estimate = therapyEstimate {
+            lines.append("Learned from History by the app (recency-weighted, half-life 7 days; shown to the user as suggestions, never applied without their acceptance):")
+            for quantity in TherapyQuantity.allCases {
+                lines.append("- " + learnedLine(quantity, estimate))
+            }
+        }
+        for change in therapyChanges.suffix(5) {
+            let name = change.quantity == .carbRatio ? "carb ratio" : "insulin sensitivity"
+            let old = change.old.map(number) ?? "unset"
+            let new = change.new.map(number) ?? "unset"
+            lines.append("Setting change \(format(change.date, "yyyy-MM-dd")): \(name) \(old) → \(new) (\(change.evidence)).")
+        }
+        return lines
+    }
+
+    private func learnedLine(_ quantity: TherapyQuantity, _ estimate: TherapyEstimate) -> String {
+        let name = quantity == .carbRatio ? "carb ratio" : "insulin sensitivity"
+        let unit = quantity == .carbRatio ? "g per u" : "mmol/L per u"
+        let kind = quantity == .carbRatio ? "meal" : "correction"
+        guard let learned = estimate.estimate(quantity) else {
+            if quantity == .carbRatio, estimate.unresolvedMealEpisodes > 0 {
+                return "\(name): not identifiable yet; \(estimate.unresolvedMealEpisodes) clean meal episodes but no sensitivity to separate carbs from insulin"
+            }
+            return "\(name): no clean \(kind) episodes yet"
+        }
+        var line = "\(name) about \(number(learned.value)) \(unit) from \(learned.episodeCount) \(kind) episodes (middle half \(number(learned.spread.lowerBound))–\(number(learned.spread.upperBound)), ±\(Int((learned.relativeStandardError * 100).rounded()))%)"
+        if !learned.hasEnoughEvidence { line += ", too little evidence to suggest" }
+        if quantity == .carbRatio, let basis = estimate.carbRatioBasis {
+            switch basis {
+            case let .estimatedSensitivity(value): line += ", given learned sensitivity \(number(value))"
+            case let .workingSensitivity(value): line += ", assuming the working sensitivity \(number(value))"
+            }
+        }
+        if !learned.byTimeOfDay.isEmpty {
+            line += "; by time of day " + learned.byTimeOfDay.map { "\($0.timeOfDay.label.lowercased()) \(number($0.value))" }.joined(separator: ", ")
+        }
+        return line
     }
 
     private func forecastLine(_ forecast: Forecast) -> String {

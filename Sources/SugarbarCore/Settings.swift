@@ -7,6 +7,7 @@ public struct Settings: Equatable, Sendable {
     public var disclaimerAcknowledged: Bool
     public var alerts: AlertSettings
     public var therapy: TherapySettings
+    public var therapyLearning: TherapyLearning
     public var dosing: DosingSettings
 
     public init(
@@ -16,6 +17,7 @@ public struct Settings: Equatable, Sendable {
         disclaimerAcknowledged: Bool,
         alerts: AlertSettings = .default,
         therapy: TherapySettings = .default,
+        therapyLearning: TherapyLearning = .default,
         dosing: DosingSettings = .default
     ) {
         self.thresholds = thresholds
@@ -24,6 +26,7 @@ public struct Settings: Equatable, Sendable {
         self.disclaimerAcknowledged = disclaimerAcknowledged
         self.alerts = alerts
         self.therapy = therapy
+        self.therapyLearning = therapyLearning
         self.dosing = dosing
     }
 
@@ -55,6 +58,7 @@ public final class UserDefaultsSettingsStore: SettingsStore, @unchecked Sendable
         static let selectedPatientId = "connection.patientId"
         static let disclaimerAcknowledged = "disclaimer.acknowledged"
         static let alerts = "alerts.settings"
+        static let therapyLearning = "therapy.learning"
         static let dosing = "dosing.settings"
     }
 
@@ -72,6 +76,7 @@ public final class UserDefaultsSettingsStore: SettingsStore, @unchecked Sendable
             disclaimerAcknowledged: defaults.bool(forKey: Key.disclaimerAcknowledged),
             alerts: loadAlerts(),
             therapy: TherapySettings.load(from: defaults),
+            therapyLearning: loadTherapyLearning(),
             dosing: loadDosing()
         )
     }
@@ -95,6 +100,14 @@ public final class UserDefaultsSettingsStore: SettingsStore, @unchecked Sendable
         if let dosing = try? JSONEncoder().encode(settings.dosing) {
             defaults.set(dosing, forKey: Key.dosing)
         }
+        if let learning = try? JSONEncoder().encode(settings.therapyLearning) {
+            defaults.set(learning, forKey: Key.therapyLearning)
+        }
+    }
+
+    private func loadTherapyLearning() -> TherapyLearning {
+        guard let data = defaults.data(forKey: Key.therapyLearning) else { return .default }
+        return (try? JSONDecoder().decode(TherapyLearning.self, from: data)) ?? .default
     }
 
     private func loadThresholds() -> Thresholds {

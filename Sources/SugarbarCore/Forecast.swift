@@ -65,7 +65,7 @@ public let momentumBlendDuration: TimeInterval = 30 * 60
 
 /// Where glucose is heading, summing Bolus insulin, Meal carbs and recent momentum.
 /// Nil when the therapy settings are incomplete or invalid, there is no fresh in-range
-/// Reading, or the sensor is warming up. Informational only: never a dose recommendation.
+/// Reading, or the sensor is warming up. Informational; the Suggested Dose is calculated separately.
 public func forecast(
     readings: [Reading],
     doses: [InsulinDose],

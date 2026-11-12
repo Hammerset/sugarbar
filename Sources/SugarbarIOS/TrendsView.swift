@@ -32,6 +32,17 @@ struct TrendsView: View {
                         .font(.footnote)
                         .frame(maxWidth: .infinity, alignment: .center)
 
+                    ForEach(model.therapySuggestions, id: \.quantity) { suggestion in
+                        TherapySuggestionRow(
+                            suggestion: suggestion,
+                            onAccept: { model.acceptSuggestion(suggestion) },
+                            onDismiss: { model.dismissSuggestion(suggestion) }
+                        )
+                        .font(.footnote)
+                        .padding(12)
+                        .background(.yellow.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
+                    }
+
                     if let stateLine {
                         Text(stateLine)
                             .font(.subheadline)
@@ -108,7 +119,7 @@ struct TrendsView: View {
                 ClaudeAPIKeyView(model: model)
             }
             .sheet(isPresented: $showTherapySettings, onDismiss: model.reloadSettings) {
-                TherapySettingsView()
+                TherapySettingsView(model: model)
             }
             .sheet(isPresented: $showAskClaude) {
                 if let askClaude {

@@ -17,6 +17,7 @@ struct MealLogView: View {
     @State private var strategyError: String?
     @State private var doseDraft = DoseDraft()
     @State private var showDoseLog = false
+    @State private var showTherapySettings = false
 
     init(model: GlucoseViewModel, mode: MealEntryMode = .log) {
         self.model = model
@@ -42,13 +43,15 @@ struct MealLogView: View {
                     MealPlanSections(
                         draft: $draft,
                         suggestion: model.doseSuggestion(carbs: draft.carbsGrams),
+                        pendingTherapySuggestions: model.therapySuggestions,
                         penStep: model.settings.dosing.penStep,
                         canAskClaude: model.hasClaudeAPIKey,
                         isLoadingStrategy: isLoadingStrategy,
                         strategyError: strategyError,
                         onRequestStrategy: { Task { await runStrategy() } },
                         onLogDose: openDoseLog,
-                        onSavePlan: { save(as: .planned) }
+                        onSavePlan: { save(as: .planned) },
+                        onOpenTherapySettings: { showTherapySettings = true }
                     )
                 }
                 recentSection
@@ -75,6 +78,9 @@ struct MealLogView: View {
                     if let data = image.jpegData(compressionQuality: 0.9) { setPhoto(data) }
                 }
                 .ignoresSafeArea()
+            }
+            .sheet(isPresented: $showTherapySettings, onDismiss: model.reloadSettings) {
+                TherapySettingsView(model: model)
             }
             .sheet(isPresented: $showDoseLog) {
                 DoseLogView(model: model, initialDraft: doseDraft) { dose in

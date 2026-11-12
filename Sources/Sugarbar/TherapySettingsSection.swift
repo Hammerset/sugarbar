@@ -16,6 +16,13 @@ struct TherapySettingsSection: View {
 
     var body: some View {
         Section {
+            ForEach(model.therapySuggestions, id: \.quantity) { suggestion in
+                TherapySuggestionRow(
+                    suggestion: suggestion,
+                    onAccept: { model.acceptSuggestion(suggestion) },
+                    onDismiss: { model.dismissSuggestion(suggestion) }
+                )
+            }
             TherapySettingsFields(therapy: $therapy)
             if let error {
                 Text(error).font(.caption).foregroundStyle(.red)
@@ -36,6 +43,27 @@ struct TherapySettingsSection: View {
                 .foregroundStyle(.secondary)
         }
         .onChange(of: therapy) { didSave = false }
+        .onChange(of: model.settings.therapy) { _, saved in therapy = saved }
+
+        Section {
+            TherapyEstimateRows(
+                estimate: model.therapyEstimate,
+                therapy: model.settings.therapy,
+                isEstimating: model.isEstimatingTherapy,
+                onEstimate: model.recomputeTherapyEstimate
+            )
+        } header: {
+            Text("Learned from History")
+        } footer: {
+            Text(TherapyEstimateRows.note)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .task { model.refreshTherapyEstimateIfDue() }
+
+        Section("Therapy Changes") {
+            TherapyChangeLogRows(changes: model.settings.therapyLearning.changes)
+        }
     }
 
     private func save() {
@@ -45,9 +73,7 @@ struct TherapySettingsSection: View {
             return
         }
         error = nil
-        var updated = model.settings
-        updated.therapy = therapy
-        model.applySettings(updated)
+        model.saveTherapy(therapy)
         didSave = true
     }
 }
