@@ -23,7 +23,7 @@ public struct Thresholds: Equatable, Sendable {
     }
 }
 
-public enum Band: Equatable, Sendable {
+public enum Band: Hashable, CaseIterable, Sendable {
     case urgentLow
     case low
     case inRange

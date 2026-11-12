@@ -2,16 +2,26 @@ import Foundation
 
 public enum HistoryWindow: Int, CaseIterable, Identifiable, Sendable {
     case fourHours = 4
-    case eightHours = 8
     case twelveHours = 12
+    case day = 24
+    case threeDays = 72
+    case week = 168
+    case twoWeeks = 336
+    case thirtyDays = 720
+    case ninetyDays = 2160
 
     public var hours: Int { rawValue }
     public var id: Int { rawValue }
-}
+    public var duration: TimeInterval { Double(hours) * 3600 }
+    public var isMultiDay: Bool { hours > 24 }
 
-public func readings(_ readings: [Reading], within window: HistoryWindow, of now: Date) -> [Reading] {
-    let cutoff = now.addingTimeInterval(-Double(window.hours) * 3600)
-    return readings.filter { $0.timestamp >= cutoff }
+    public var label: String {
+        hours <= 24 ? "\(hours)h" : "\(hours / 24)d"
+    }
+
+    public func interval(endingAt now: Date) -> ClosedRange<Date> {
+        now.addingTimeInterval(-duration)...now
+    }
 }
 
 /// Snaps a hovered date to the closest actual Reading. We never interpolate between
@@ -20,11 +30,4 @@ public func nearestReading(to date: Date, in readings: [Reading]) -> Reading? {
     readings.min { lhs, rhs in
         abs(lhs.timestamp.timeIntervalSince(date)) < abs(rhs.timestamp.timeIntervalSince(date))
     }
-}
-
-public func mergeReadings(history: [Reading], latest: Reading) -> [Reading] {
-    var byTimestamp: [Date: Reading] = [:]
-    for reading in history { byTimestamp[reading.timestamp] = reading }
-    byTimestamp[latest.timestamp] = latest
-    return byTimestamp.values.sorted { $0.timestamp < $1.timestamp }
 }

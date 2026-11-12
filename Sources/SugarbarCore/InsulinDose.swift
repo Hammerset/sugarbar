@@ -27,11 +27,6 @@ public struct InsulinDose: Equatable, Sendable, Codable, Identifiable {
     public var isManualEntry: Bool { deviceName == nil }
 }
 
-public func insulinDoses(_ doses: [InsulinDose], within window: HistoryWindow, of now: Date) -> [InsulinDose] {
-    let cutoff = now.addingTimeInterval(-Double(window.hours) * 3600)
-    return doses.filter { $0.timestamp >= cutoff && $0.timestamp <= now }
-}
-
 /// Every dose within `tolerance` of a hovered date, oldest first.
 public func insulinDoses(near date: Date, in doses: [InsulinDose], tolerance: TimeInterval) -> [InsulinDose] {
     doses

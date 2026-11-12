@@ -1,6 +1,6 @@
 # sugarbar
 
-A macOS menu-bar app that displays the user's own FreeStyle Libre 3 glucose data — latest value, trend, colour-coded against a reference range, with a recent-history graph.
+A macOS menu-bar app that displays the user's own FreeStyle Libre 3 glucose data — latest value, trend, colour-coded against a reference range, with a history graph reaching back up to 90 days.
 
 ## Language
 
@@ -64,6 +64,22 @@ _Avoid_: food log, entry, carbs (the number, not the event).
 Claude's proposed carb figure for a Meal photo, with the foods it saw, what it assumed, and a confidence. Never saved as-is — a starting point for the review step.
 _Avoid_: result, answer, prediction.
 
+**History**:
+The durable record of Readings and Doses kept on each device, never pruned. Fed by every successful poll and by **Backfill**; the graph and Time in Range read from it. Meals are not part of it — they already persist in the App Group.
+_Avoid_: log, archive, cache, database.
+
+**Backfill**:
+Readings and Doses pulled from Glooko into History for times the app was not polling — the past 90 days on first sign-in, then whatever Glooko has gained since. Glooko only learns about Readings hours after the sensor, so LibreLinkUp stays the live source and Backfill fills the gaps.
+_Avoid_: import, sync, catch-up.
+
+**Range**:
+The span of History the graph shows and Time in Range summarises — 4h, 12h, 24h, 3d, 7d, 14d, 30d or 90d (`HistoryWindow` in code).
+_Avoid_: period, zoom.
+
+**Time in Range**:
+The share of a Range spent in each Band. Counted in five-minute slots, so a minute-by-minute live stretch weighs the same as a five-minute backfilled one, and time with no Readings counts for nothing.
+_Avoid_: TIR in UI copy, score, compliance.
+
 **Therapy Settings**:
 The user's personal factors the Forecast needs: insulin sensitivity (mmol/L one unit of Bolus lowers glucose), carb ratio (grams one unit covers), and insulin duration, insulin peak and carb absorption time. Sensitivity and carb ratio have no defaults; the timings default to 6 h, 75 min and 3 h.
 _Avoid_: profile, factors, ISF/ICR in UI text.
@@ -83,7 +99,8 @@ _Avoid_: COB in UI text, active carbs.
 ## Relationships
 
 - A **Primary** shares to one or more **Followers**; sugarbar authenticates as a **Follower**.
-- A **Reading** has exactly one **Trend** and one status (**In-Range** / **Low** / **High**) derived from the **Reference Range**.
+- A **Reading** has exactly one **Trend** and one status (**In-Range** / **Low** / **High**) derived from the **Reference Range**. A backfilled Reading's Trend is always not-determined: Glooko does not carry one.
+- **History** holds each **Reading** once: the same sensor Reading arriving from LibreLinkUp and from **Backfill** (timestamps within 30 s) is kept as the first copy seen. A **Dose** is identified by its kind and timestamp; a later copy (e.g. units edited in Glooko) replaces the earlier one.
 - A **Reading**'s **Staleness** is independent of its value — a fresh-looking number can still be stale.
 - A **Sensor State** can exist with no current **Reading** (e.g. warm-up).
 - An **Alert** belongs to a family (low, high; later e.g. predicted low). Each family debounces on its own: one alert on entering, one more on escalation, then one per repeat interval; leaving the family resets it.

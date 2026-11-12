@@ -7,13 +7,11 @@ import SugarbarUI
 @Observable
 final class BarViewModel {
     private(set) var latest: Reading?
-    private(set) var history: [Reading] = []
     private(set) var sensorActivation: Date?
     private(set) var statusMessage: String?
     private(set) var now = Date()
     private(set) var settings: Settings
     private(set) var availableConnections: [Connection] = []
-    private(set) var doses: [InsulinDose] = []
     private(set) var insulinSyncError: String?
     private(set) var meals: [Meal] = []
 
@@ -22,11 +20,14 @@ final class BarViewModel {
     private let settingsStore: SettingsStore
     private let graphSnapshotStore: GraphSnapshotStore
     private let mealStore: MealStore
+    private let historyStore: HistoryStore
     private let makeClient: () -> LibreLinkUpClient
     private let glookoClient: GlookoClient
     private let alerter = GlucoseAlerter(allowsTimeSensitive: false)
     private var engine: PollingEngine?
     private var lastDoseFetch: Date?
+    private var isSyncingGlooko = false
+    private var historyRevision = 0
 
     init(
         credentialStore: CredentialStore = KeychainStore(),
@@ -34,6 +35,7 @@ final class BarViewModel {
         settingsStore: SettingsStore = UserDefaultsSettingsStore(),
         graphSnapshotStore: GraphSnapshotStore = UserDefaultsGraphSnapshotStore(),
         mealStore: MealStore = UserDefaultsMealStore(),
+        historyStore: HistoryStore = FileHistoryStore(),
         makeClient: @escaping () -> LibreLinkUpClient = { LibreLinkUpClient(transport: URLSessionTransport()) },
         glookoClient: GlookoClient = GlookoClient(transport: URLSessionTransport())
     ) {
@@ -42,6 +44,7 @@ final class BarViewModel {
         self.settingsStore = settingsStore
         self.graphSnapshotStore = graphSnapshotStore
         self.mealStore = mealStore
+        self.historyStore = historyStore
         self.makeClient = makeClient
         self.glookoClient = glookoClient
         self.settings = settingsStore.load()
@@ -71,14 +74,13 @@ final class BarViewModel {
     }
 
     func chartSeries(window: HistoryWindow) -> [Reading] {
-        guard let latest else {
-            return readings(history, within: window, of: now)
-        }
-        return readings(mergeReadings(history: history, latest: latest), within: window, of: now)
+        _ = historyRevision
+        return historyStore.readings(in: window.interval(endingAt: now))
     }
 
     func chartDoses(window: HistoryWindow) -> [InsulinDose] {
-        insulinDoses(doses, within: window, of: now)
+        _ = historyRevision
+        return historyStore.doses(in: window.interval(endingAt: now))
     }
 
     func chartMeals(window: HistoryWindow) -> [Meal] {
@@ -126,7 +128,6 @@ final class BarViewModel {
         try? credentialStore.clearCredentials()
         try? credentialStore.clearToken()
         latest = nil
-        history = []
         sensorActivation = nil
         availableConnections = []
         statusMessage = "Open Settings to sign in"
@@ -142,7 +143,6 @@ final class BarViewModel {
 
     func signOutGlooko() {
         try? glookoCredentialStore.clearCredentials()
-        doses = []
         insulinSyncError = nil
         lastDoseFetch = nil
     }
@@ -165,7 +165,7 @@ final class BarViewModel {
         meals = mealStore.load()
         let outcome = await pollGlucose()
         await alerter.evaluate(latest: latest, sensorActivation: sensorActivation, now: now)
-        await refreshDosesIfDue()
+        Task { await refreshDosesIfDue() }
         return outcome
     }
 
@@ -181,7 +181,8 @@ final class BarViewModel {
                 preferredPatientId: settings.selectedPatientId
             )
             latest = snapshot.latest
-            history = snapshot.history
+            historyStore.append(readings: [snapshot.latest].compactMap(\.self) + snapshot.history)
+            historyRevision += 1
             sensorActivation = snapshot.sensorActivation
             statusMessage = nil
             graphSnapshotStore.save(snapshot)
@@ -194,8 +195,8 @@ final class BarViewModel {
         }
     }
 
-    /// Doses only change when the pen is scanned or an entry is typed, so Glooko is
-    /// polled far less often than the sensor.
+    /// Doses only change when the pen is scanned or an entry is typed, and Glooko's CGM
+    /// stream lags the sensor by hours, so Glooko is polled far less often than the sensor.
     private func refreshDosesIfDue() async {
         guard resolveGlookoCredentials() != nil else { return }
         if let lastDoseFetch, now.timeIntervalSince(lastDoseFetch) < doseRefreshInterval { return }
@@ -203,21 +204,18 @@ final class BarViewModel {
     }
 
     private func refreshDoses() async {
-        guard let credentials = resolveGlookoCredentials() else { return }
-        let fetchedAt = Date()
+        guard let credentials = resolveGlookoCredentials(), !isSyncingGlooko else { return }
+        isSyncingGlooko = true
+        lastDoseFetch = Date()
         do {
-            doses = try await glookoClient.fetchDoses(
-                email: credentials.email,
-                password: credentials.password,
-                from: fetchedAt.addingTimeInterval(-doseLookback),
-                to: fetchedAt.addingTimeInterval(60)
-            )
+            try await syncGlookoHistory(client: glookoClient, store: historyStore, credentials: credentials)
             insulinSyncError = nil
         } catch {
             logDiagnostic("glooko", error)
             insulinSyncError = error.sugarbarMessage
         }
-        lastDoseFetch = fetchedAt
+        isSyncingGlooko = false
+        historyRevision += 1
     }
 
     private func startEngine() {

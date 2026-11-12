@@ -7,12 +7,15 @@ import SugarbarCore
 /// along the floor, and drag-to-inspect selection.
 public struct GlucoseHistoryChart: View {
     private let series: [Reading]
+    private let segments: [[Reading]]
+    private let envelope: [[GlucoseEnvelope]]
     private let doses: [InsulinDose]
     private let meals: [Meal]
     private let thresholds: Thresholds
     private let latest: Reading?
     private let valueTint: Color
     private let xDomain: ClosedRange<Date>
+    private let markerBucket: TimeInterval?
     @Binding private var selectedDate: Date?
 
     public init(
@@ -23,15 +26,25 @@ public struct GlucoseHistoryChart: View {
         latest: Reading?,
         valueTint: Color,
         xDomain: ClosedRange<Date>,
+        markerBucket: TimeInterval? = nil,
         selectedDate: Binding<Date?>
     ) {
-        self.series = series
-        self.doses = doses
-        self.meals = meals
+        let span = xDomain.upperBound.timeIntervalSince(xDomain.lowerBound)
+        self.series = downsample(series, maxPoints: maxLinePoints)
+        if span > 7 * 86400 + 60 {
+            self.segments = []
+            self.envelope = glucoseEnvelope(series, over: xDomain, slices: span > 31 * 86400 ? Int(span / 86400) : 120)
+        } else {
+            self.segments = splitAtGaps(self.series, gap: max(30 * 60, 5 * span / Double(maxLinePoints)))
+            self.envelope = []
+        }
+        self.doses = markerBucket.map { aggregateDoses(doses, bucket: $0) } ?? doses
+        self.meals = markerBucket.map { aggregateMeals(meals, bucket: $0) } ?? meals
         self.thresholds = thresholds
         self.latest = latest
         self.valueTint = valueTint
         self.xDomain = xDomain
+        self.markerBucket = markerBucket
         self._selectedDate = selectedDate
     }
 
@@ -67,13 +80,38 @@ public struct GlucoseHistoryChart: View {
                     .foregroundStyle(line.color.opacity(0.4))
             }
 
-            ForEach(series, id: \.timestamp) { reading in
-                LineMark(
-                    x: .value("Time", reading.timestamp),
-                    y: .value("mmol/L", reading.value)
-                )
-                .interpolationMethod(.monotone)
-                .foregroundStyle(.primary)
+            ForEach(segments.indices, id: \.self) { index in
+                ForEach(segments[index], id: \.timestamp) { reading in
+                    LineMark(
+                        x: .value("Time", reading.timestamp),
+                        y: .value("mmol/L", reading.value),
+                        series: .value("Segment", index)
+                    )
+                    .interpolationMethod(.monotone)
+                    .lineStyle(StrokeStyle(lineWidth: isMultiDay ? 1 : 2))
+                    .foregroundStyle(.primary)
+                }
+            }
+
+            ForEach(envelope.indices, id: \.self) { index in
+                ForEach(envelope[index], id: \.start) { slice in
+                    AreaMark(
+                        x: .value("Time", slice.middle),
+                        yStart: .value("Lowest", slice.low),
+                        yEnd: .value("Highest", slice.high),
+                        series: .value("Band", "range-\(index)")
+                    )
+                    .interpolationMethod(.monotone)
+                    .foregroundStyle(.primary.opacity(0.15))
+                    LineMark(
+                        x: .value("Time", slice.middle),
+                        y: .value("mmol/L", slice.mean),
+                        series: .value("Band", "mean-\(index)")
+                    )
+                    .interpolationMethod(.monotone)
+                    .lineStyle(StrokeStyle(lineWidth: 1.5))
+                    .foregroundStyle(.primary)
+                }
             }
 
             if let latest {
@@ -88,15 +126,17 @@ public struct GlucoseHistoryChart: View {
                 let isHovered = hoveredDoses.contains(dose)
                 PointMark(
                     x: .value("Time", dose.timestamp),
-                    y: .value("mmol/L", doseBaseline)
+                    y: .value("mmol/L", doseBaseline(dose.kind))
                 )
                 .symbol(dose.kind == .bolus ? .circle : .diamond)
                 .symbolSize(isHovered ? 110 : (dose.kind == .bolus ? 50 : 60))
                 .foregroundStyle(dose.kind.tint)
                 .annotation(position: .top, spacing: 1) {
-                    Text(formatUnits(dose.units))
-                        .font(.caption2)
-                        .foregroundStyle(dose.kind.tint)
+                    if showsMarkerLabels {
+                        Text(formatUnits(dose.units))
+                            .font(.caption2)
+                            .foregroundStyle(dose.kind.tint)
+                    }
                 }
             }
 
@@ -110,9 +150,11 @@ public struct GlucoseHistoryChart: View {
                 .symbolSize(isHovered ? 110 : 55)
                 .foregroundStyle(mealTint)
                 .annotation(position: .trailing, spacing: 3, overflowResolution: .init(x: .fit(to: .chart), y: .disabled)) {
-                    Text("\(formatGrams(meal.carbsGrams)) g")
-                        .font(.caption2)
-                        .foregroundStyle(mealTint)
+                    if showsMarkerLabels {
+                        Text("\(formatGrams(meal.carbsGrams)) g")
+                            .font(.caption2)
+                            .foregroundStyle(mealTint)
+                    }
                 }
             }
 
@@ -122,6 +164,13 @@ public struct GlucoseHistoryChart: View {
         }
         .chartXSelection(value: $selectedDate)
         .chartXScale(domain: xDomain)
+        .chartXAxis {
+            AxisMarks(values: xAxis.values) { _ in
+                AxisGridLine()
+                AxisTick()
+                AxisValueLabel(format: xAxis.format, anchor: isMultiDay ? .topLeading : nil)
+            }
+        }
         .chartYScale(domain: yDomain)
         .frame(height: 180)
     }
@@ -137,8 +186,39 @@ public struct GlucoseHistoryChart: View {
         return SugarbarCore.meals(near: selectedDate, in: meals, tolerance: hoverTolerance)
     }
 
-    private var hoverTolerance: TimeInterval {
-        xDomain.upperBound.timeIntervalSince(xDomain.lowerBound) / 60
+    private var span: TimeInterval { xDomain.upperBound.timeIntervalSince(xDomain.lowerBound) }
+
+    private var isMultiDay: Bool { span > 86400 + 60 }
+
+    private var hoverTolerance: TimeInterval { span / 60 }
+
+    private var showsMarkerLabels: Bool { markerBucket == nil }
+
+    private var xAxis: (values: AxisMarkValues, format: Date.FormatStyle) {
+        let days = span / 86400
+        let dayMonth = Date.FormatStyle.dateTime.day().month(.abbreviated)
+        switch days {
+        case ...0.26: return (.stride(by: .hour), .dateTime.hour())
+        case ...0.51: return (.stride(by: .hour, count: 2), .dateTime.hour())
+        case ...1.01: return (.stride(by: .hour, count: 4), .dateTime.hour())
+        case ...7.01: return (.stride(by: .day), .dateTime.weekday(.abbreviated))
+        case ...14.01: return (.stride(by: .day, count: 4), dayMonth)
+        case ...30.01: return (.stride(by: .day, count: 7), dayMonth)
+        default: return (.stride(by: .month), .dateTime.month(.abbreviated))
+        }
+    }
+
+    private var pointTimeFormat: Date.FormatStyle {
+        isMultiDay ? .dateTime.weekday(.abbreviated).day().month(.abbreviated).hour().minute() : .dateTime.hour().minute()
+    }
+
+    /// Pooled markers stand for a whole bucket, so they are labelled by its date rather than a time.
+    private var markerTimeFormat: Date.FormatStyle {
+        switch markerBucket {
+        case nil: .dateTime.hour().minute()
+        case let bucket? where bucket < 86400: .dateTime.weekday(.abbreviated).hour()
+        default: .dateTime.day().month(.abbreviated)
+        }
     }
 
     private func nearestReading(to date: Date?, in series: [Reading]) -> Reading? {
@@ -159,15 +239,15 @@ public struct GlucoseHistoryChart: View {
             }
             .annotation(position: .bottom, spacing: 4, overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))) {
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(reading.timestamp, format: .dateTime.hour().minute())
+                    Text(reading.timestamp, format: pointTimeFormat)
                         .foregroundStyle(.secondary)
                     ForEach(doses) { dose in
-                        Text("\(dose.timestamp, format: .dateTime.hour().minute()) · \(formatUnits(dose.units)) u · \(dose.insulinName ?? dose.kind.label)")
+                        Text("\(dose.timestamp, format: markerTimeFormat) · \(formatUnits(dose.units)) u · \(dose.insulinName ?? dose.kind.label)")
                             .fontWeight(.semibold)
                             .foregroundStyle(dose.kind.tint)
                     }
                     ForEach(meals) { meal in
-                        Text("\(meal.timestamp, format: .dateTime.hour().minute()) · \(formatGrams(meal.carbsGrams)) g · \(meal.summary)")
+                        Text("\(meal.timestamp, format: markerTimeFormat) · \(formatGrams(meal.carbsGrams)) g · \(meal.summary)")
                             .fontWeight(.semibold)
                             .foregroundStyle(mealTint)
                     }
@@ -206,17 +286,27 @@ public struct GlucoseHistoryChart: View {
     }
 
     private var stripHeight: Double {
-        switch (doses.isEmpty, meals.isEmpty) {
-        case (true, true): 0
-        case (false, false): 2.4
-        default: 1.4
-        }
+        let rows = doseRows + (meals.isEmpty ? 0 : 1)
+        return rows == 0 ? 0 : 1.4 + Double(rows - 1) * rowHeight
     }
 
-    private var doseBaseline: Double { yDomain.lowerBound + (meals.isEmpty ? 0.35 : 1.4) }
+    /// Pooled Bolus and Basal markers share a bucket's midpoint, so Basal gets its own row.
+    private var doseRows: Int {
+        guard !doses.isEmpty else { return 0 }
+        return markerBucket != nil && Set(doses.map(\.kind)).count > 1 ? 2 : 1
+    }
+
+    private var rowHeight: Double { 1.0 }
+
+    private func doseBaseline(_ kind: InsulinKind) -> Double {
+        let row = (meals.isEmpty ? 0 : 1) + (doseRows == 2 && kind == .basal ? 1 : 0)
+        return yDomain.lowerBound + 0.35 + Double(row) * rowHeight
+    }
 
     private var mealBaseline: Double { yDomain.lowerBound + 0.35 }
 }
+
+private let maxLinePoints = 600
 
 public let mealTint: Color = .orange
 

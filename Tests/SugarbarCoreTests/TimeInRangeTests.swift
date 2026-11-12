@@ -44,4 +44,18 @@ import Testing
         #expect(summary?.inRangePercent == 50)
         #expect(summary?.highPercent == 25)
     }
+
+    @Test func weighsMinuteReadingsAndFiveMinuteBackfillByTimeNotCount() {
+        // An hour of live one-minute Readings in range, then an hour of five-minute backfill urgently high.
+        let slotStart = Date(timeIntervalSince1970: 1_000_200)
+        let at = { (minutesAgo: Int, value: Double) in
+            Reading(value: value, timestamp: slotStart.addingTimeInterval(-Double(minutesAgo) * 60), trend: .stable)
+        }
+        let live = (1...60).map { at($0, 6.0) }
+        let backfill = (13...24).map { at($0 * 5, 15.0) }
+        let summary = timeInRange(live + backfill)
+        #expect(summary?.inRangePercent == 50)
+        #expect(summary?.percent(.urgentHigh) == 50)
+        #expect(summary?.percent(.high) == 0)
+    }
 }
