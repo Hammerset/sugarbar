@@ -102,7 +102,7 @@ public func forecast(
         return insulin + carbs
     }
 
-    let slope = momentumSlope(readings: readings, latest: latest)
+    let residualSlope = momentumSlope(readings: readings, latest: latest, explained: cumulativeEffect(at:))
     let effectsEnd = boluses.map { $0.timestamp.addingTimeInterval(therapy.insulinDuration) }
         + eaten.map { $0.timestamp.addingTimeInterval(therapy.carbAbsorptionTime) }
     let horizon = max(forecastDisplayHorizon, (effectsEnd.max() ?? latest.timestamp).timeIntervalSince(latest.timestamp))
@@ -115,14 +115,10 @@ public func forecast(
         let effect = cumulativeEffect(at: date)
         let effectDelta = effect - previousEffect
         previousEffect = effect
-        // Momentum already reflects what insulin and carbs are doing right now, so it
-        // replaces their effect at first and hands over to it as its weight fades.
-        if let slope {
+        value += effectDelta
+        if let residualSlope {
             let midpoint = (Double(step) - 0.5) * forecastStep
-            let weight = max(0, 1 - midpoint / momentumBlendDuration)
-            value += weight * slope * forecastStep + (1 - weight) * effectDelta
-        } else {
-            value += effectDelta
+            value += max(0, 1 - midpoint / momentumBlendDuration) * residualSlope * forecastStep
         }
         points.append(ForecastPoint(date: date, value: value))
     }
@@ -141,9 +137,11 @@ private let momentumMinimumSpan: TimeInterval = 5 * 60
 private let momentumMaximumGap: TimeInterval = 6 * 60
 private let momentumMaximumSlope = 0.25 / 60
 
-/// Least-squares slope in mmol/L per second over the last 15 minutes, or nil when the
-/// Readings are too few, too short a span, gapped, or include a LO/HI clamp.
-func momentumSlope(readings: [Reading], latest: Reading) -> Double? {
+/// Least-squares slope (mmol/L per second) over the last 15 minutes of the part of the
+/// Readings that `explained` does not account for, so momentum never re-counts the
+/// modelled insulin and carb effect. Nil when the Readings are too few, too short a
+/// span, gapped, or include a LO/HI clamp.
+func momentumSlope(readings: [Reading], latest: Reading, explained: (Date) -> Double = { _ in 0 }) -> Double? {
     let windowStart = latest.timestamp.addingTimeInterval(-momentumWindow)
     let recent = readings
         .filter { $0.timestamp >= windowStart && $0.timestamp <= latest.timestamp }
@@ -159,7 +157,7 @@ func momentumSlope(readings: [Reading], latest: Reading) -> Double? {
     }
 
     let xs = recent.map { $0.timestamp.timeIntervalSince(latest.timestamp) }
-    let ys = recent.map(\.value)
+    let ys = recent.map { $0.value - explained($0.timestamp) }
     let meanX = xs.reduce(0, +) / Double(xs.count)
     let meanY = ys.reduce(0, +) / Double(ys.count)
     let covariance = zip(xs, ys).reduce(0) { $0 + ($1.0 - meanX) * ($1.1 - meanY) }

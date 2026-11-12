@@ -100,7 +100,7 @@ import Testing
     }
 
     @Test func doseOlderThanTheDurationHasNoEffect() throws {
-        let result = try #require(run(flat(7), doses: [bolus(10, minutesAgo: 6 * 60 + 1)]))
+        let result = try #require(run(single(7), doses: [bolus(10, minutesAgo: 6 * 60 + 1)]))
         #expect(result.points.allSatisfy { abs($0.value - 7) < 1e-9 })
         #expect(result.insulinOnBoard == 0)
     }
@@ -127,6 +127,21 @@ import Testing
         #expect(abs(result.eventual - (8 + 0.1 * 15)) < 1e-9)
         let afterBlend = result.points.filter { $0.date >= now.addingTimeInterval(30 * 60) }
         #expect(afterBlend.allSatisfy { abs($0.value - result.eventual) < 1e-9 })
+    }
+
+    @Test func momentumOnlyCarriesTheSlopeInsulinAndCarbsDoNotExplain() throws {
+        let carbSlopePerMinute = 40 * 2.5 / 10 / 180
+        let matchingModel = stride(from: 15, through: 0, by: -1).map {
+            Reading(value: 8 - carbSlopePerMinute * Double($0), timestamp: now.addingTimeInterval(-Double($0) * 60), trend: .rising)
+        }
+        let withHistory = try #require(run(matchingModel, meals: [meal(40, minutesAgo: 60)]))
+        let withoutHistory = try #require(run(single(8), meals: [meal(40, minutesAgo: 60)]))
+        #expect(abs(withHistory.eventual - withoutHistory.eventual) < 1e-9)
+    }
+
+    @Test func flatReadingsAtAMealAndBolusStillSettleWhereTheEffectsCancel() throws {
+        let result = try #require(run(flat(6), doses: [bolus(6, minutesAgo: 0)], meals: [meal(60, minutesAgo: 0)]))
+        #expect(abs(result.eventual - 6) < 0.3)
     }
 
     @Test func momentumIsSkippedWhenReadingsAreTooFewOrGapped() throws {
