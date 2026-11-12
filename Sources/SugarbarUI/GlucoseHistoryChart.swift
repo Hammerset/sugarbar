@@ -242,7 +242,7 @@ public struct GlucoseHistoryChart: View {
                     Text(reading.timestamp, format: pointTimeFormat)
                         .foregroundStyle(.secondary)
                     ForEach(doses) { dose in
-                        Text("\(dose.timestamp, format: markerTimeFormat) · \(formatUnits(dose.units)) u · \(dose.insulinName ?? dose.kind.label)")
+                        Text("\(dose.timestamp, format: markerTimeFormat) · \(formatUnits(dose.units)) u · \(dose.insulinName ?? dose.kind.label)\(dose.isManual ? " · entered" : "")")
                             .fontWeight(.semibold)
                             .foregroundStyle(dose.kind.tint)
                     }

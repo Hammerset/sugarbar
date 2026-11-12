@@ -46,14 +46,14 @@ private let oslo = TimeZone(identifier: "Europe/Oslo")!
         #expect(doses[0].kind == .basal)
         #expect(doses[0].units == 9)
         #expect(doses[0].insulinName == "Tresiba")
-        #expect(doses[0].isManualEntry)
+        #expect(!doses[0].isFromPen)
         // "08:35:00.000Z" is 08:35 Oslo time (UTC+2 in October), i.e. 06:35Z.
         #expect(doses[0].timestamp == Date(timeIntervalSince1970: 1_791_794_100 - 7200))
 
         #expect(doses[1].kind == .bolus)
         #expect(doses[1].units == 4)
         #expect(doses[1].deviceName == "Novo Nordisk NovoPen® 6/Echo Plus")
-        #expect(!doses[1].isManualEntry)
+        #expect(doses[1].isFromPen)
         #expect(doses[1].timestamp == Date(timeIntervalSince1970: 1_791_825_242 - 7200))
     }
 
