@@ -1,4 +1,5 @@
 import AppKit
+import SugarbarUI
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -10,6 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
+        ForegroundNotificationPresenter.shared.install()
         statusItemController = StatusItemController(model: model) { [weak self] in
             self?.openSettings()
         }

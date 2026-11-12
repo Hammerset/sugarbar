@@ -1,5 +1,6 @@
 @preconcurrency import BackgroundTasks
 import SugarbarCore
+import SugarbarUI
 import UIKit
 
 let backgroundRefreshTaskIdentifier = "com.sugarbar.Sugarbar.refresh"
@@ -9,6 +10,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
+        ForegroundNotificationPresenter.shared.install()
         BGTaskScheduler.shared.register(forTaskWithIdentifier: backgroundRefreshTaskIdentifier, using: nil) { task in
             handleBackgroundRefresh(task as! BGAppRefreshTask)
         }

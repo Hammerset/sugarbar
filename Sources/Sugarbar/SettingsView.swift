@@ -48,6 +48,7 @@ struct SettingsView: View {
             glookoSection
             referenceRangeSection
             pollingSection
+            AlertsSection(model: model)
             generalSection
             saveSection
         }
