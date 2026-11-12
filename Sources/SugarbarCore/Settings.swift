@@ -5,17 +5,20 @@ public struct Settings: Equatable, Sendable {
     public var pollCadence: TimeInterval
     public var selectedPatientId: String?
     public var disclaimerAcknowledged: Bool
+    public var alerts: AlertSettings
 
     public init(
         thresholds: Thresholds,
         pollCadence: TimeInterval,
         selectedPatientId: String?,
-        disclaimerAcknowledged: Bool
+        disclaimerAcknowledged: Bool,
+        alerts: AlertSettings = .default
     ) {
         self.thresholds = thresholds
         self.pollCadence = pollCadence
         self.selectedPatientId = selectedPatientId
         self.disclaimerAcknowledged = disclaimerAcknowledged
+        self.alerts = alerts
     }
 
     public static let cadenceRange: ClosedRange<TimeInterval> = 30...300
@@ -45,6 +48,7 @@ public final class UserDefaultsSettingsStore: SettingsStore, @unchecked Sendable
         static let pollCadence = "poll.cadence"
         static let selectedPatientId = "connection.patientId"
         static let disclaimerAcknowledged = "disclaimer.acknowledged"
+        static let alerts = "alerts.settings"
     }
 
     private let defaults: UserDefaults
@@ -58,7 +62,8 @@ public final class UserDefaultsSettingsStore: SettingsStore, @unchecked Sendable
             thresholds: loadThresholds(),
             pollCadence: loadCadence(),
             selectedPatientId: defaults.string(forKey: Key.selectedPatientId),
-            disclaimerAcknowledged: defaults.bool(forKey: Key.disclaimerAcknowledged)
+            disclaimerAcknowledged: defaults.bool(forKey: Key.disclaimerAcknowledged),
+            alerts: loadAlerts()
         )
     }
 
@@ -69,6 +74,9 @@ public final class UserDefaultsSettingsStore: SettingsStore, @unchecked Sendable
         defaults.set(settings.thresholds.urgentHigh, forKey: Key.urgentHigh)
         defaults.set(settings.pollCadence, forKey: Key.pollCadence)
         defaults.set(settings.disclaimerAcknowledged, forKey: Key.disclaimerAcknowledged)
+        if let alerts = try? JSONEncoder().encode(settings.alerts) {
+            defaults.set(alerts, forKey: Key.alerts)
+        }
         if let patientId = settings.selectedPatientId {
             defaults.set(patientId, forKey: Key.selectedPatientId)
         } else {
@@ -84,6 +92,11 @@ public final class UserDefaultsSettingsStore: SettingsStore, @unchecked Sendable
             high: defaults.double(forKey: Key.high),
             urgentHigh: defaults.double(forKey: Key.urgentHigh)
         ) ?? .standard
+    }
+
+    private func loadAlerts() -> AlertSettings {
+        guard let data = defaults.data(forKey: Key.alerts) else { return .default }
+        return (try? JSONDecoder().decode(AlertSettings.self, from: data)) ?? .default
     }
 
     private func loadCadence() -> TimeInterval {

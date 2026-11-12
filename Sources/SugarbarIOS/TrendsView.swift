@@ -10,6 +10,7 @@ struct TrendsView: View {
     @State private var showGlookoSignIn = false
     @State private var showMealLog = false
     @State private var showClaudeKey = false
+    @State private var showAlerts = false
 
     private var thresholds: Thresholds { model.thresholds }
     private var series: [Reading] { model.chartSeries(window: window) }
@@ -58,6 +59,14 @@ struct TrendsView: View {
             }
             .navigationTitle("Trends")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button("Alerts", systemImage: "bell") { showAlerts = true }
+                }
+            }
+            .sheet(isPresented: $showAlerts) {
+                AlertSettingsView()
+            }
             .sheet(isPresented: $showGlookoSignIn) {
                 GlookoSignInView(model: model)
             }

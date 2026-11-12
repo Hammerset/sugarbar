@@ -40,6 +40,14 @@ _Avoid_: lag, delay.
 A non-reading condition the app must show gracefully: warm-up (first 60 min), signal-loss, sensor-error, sensor-ended.
 _Avoid_: status, error.
 
+**Alert**:
+A local notification that the latest live **Reading** is Low or High, raised when it enters an enabled **Band**, escalates to the urgent sub-level, or is still out of range after the repeat interval. Never raised on a **Stale** Reading or during a **Sensor State**. Opt-in, off by default.
+_Avoid_: alarm (that's the Libre app's own feature, which sugarbar does not replace), warning.
+
+**Snooze**:
+A user-chosen window during which no **Alert** is posted. An alert suppressed by a Snooze is not counted as delivered, so it fires once the Snooze ends if still applicable.
+_Avoid_: mute, silence.
+
 **Dose**:
 One insulin injection with a unit amount, a timestamp (when the pen fired, not when it synced), and a kind — **Bolus** (rapid-acting, mealtime/correction) or **Basal** (long-acting, background). Comes from Glooko, never the sensor.
 _Avoid_: injection, shot, entry.
@@ -62,6 +70,7 @@ _Avoid_: result, answer, prediction.
 - A **Reading** has exactly one **Trend** and one status (**In-Range** / **Low** / **High**) derived from the **Reference Range**.
 - A **Reading**'s **Staleness** is independent of its value — a fresh-looking number can still be stale.
 - A **Sensor State** can exist with no current **Reading** (e.g. warm-up).
+- An **Alert** belongs to a family (low, high; later e.g. predicted low). Each family debounces on its own: one alert on entering, one more on escalation, then one per repeat interval; leaving the family resets it.
 - A **Dose** is independent of any **Reading**; the graph overlays Doses on Readings by time only.
 - Doses are only as fresh as the last **Pen** sync — there is no Staleness notion for them.
 - A **Meal** is independent of any **Reading** or **Dose**; the graph overlays all three by time only.

@@ -8,6 +8,8 @@ Optionally overlays insulin doses from a **Glooko** account — connected-pen bo
 
 The iOS app can also log **meals** from a photo: Claude (Sonnet 5.5, via your own pay-per-use API key) estimates the carbohydrates, you review and adjust the grams, and the meal is saved alongside the glucose history and written to Apple Health. Meals show as markers on the graph on both platforms.
 
+Both apps can optionally post **low/high alerts** as local notifications (off by default; see [Alerts](#alerts)).
+
 > Not a medical device. For informational use only. See `CONTEXT.md` for the domain language; roadmap and design decisions live in [GitHub issues](https://github.com/Hammerset/sugarbar/issues) (decisions are labelled `decision`).
 
 ## Requirements
@@ -78,6 +80,19 @@ To log meals, open **Meals** on the Trends screen and paste a Claude API key (fr
 
 The app polls continuously while in the foreground; it signs in with its own LibreLinkUp credentials (Keychain is app-private, per target) and, on each successful poll, writes the shared App Group snapshot and asks WidgetKit to reload, feeding the Home Screen / Lock Screen widget. In the background it also registers a `BGAppRefreshTask` to top up the snapshot between foreground sessions — iOS gives no guaranteed cadence for this, so treat it as a best-effort bonus, not a reliable refresh (see #27, #31).
 
+## Alerts
+
+Off by default. Turn them on in **Settings → Alerts** (Mac) or the bell button on the Trends screen (iOS); the first time asks for notification permission. Lows (urgent low and low) are on once alerts are enabled; highs are opt-in per level.
+
+- An alert fires when a fresh Reading enters an enabled Band, and again when it moves from low to urgent low (or high to urgent high).
+- While glucose stays out of range it repeats every 20 min for lows and 60 min for highs (adjustable). Coming back into range resets it and withdraws the delivered notification.
+- No alert on a stale Reading or during sensor warm-up; a gap in data neither alerts nor counts as back in range.
+- **Snooze for 1 hour** silences everything until it expires.
+
+Alerts are evaluated after each poll, so they are only as timely as polling: on iOS that means while the app is open plus the best-effort background refresh, which iOS may delay or skip for hours. Keep the Libre app's own alarms on. Alert settings live in the shared App Group settings (so they follow you across Mac and phone once the App Group is granted); each app keeps its own record of what it has already alerted on.
+
+On iOS, lows and urgent levels use the time-sensitive interruption level so they can break through a Focus. That needs the **Time Sensitive Notifications** capability on the app's identifier: with Automatic signing, add it under Signing & Capabilities (the entitlement is already in `SugarbarIOS.entitlements`). The Mac app posts at the default level; its ad-hoc-signed build can't carry that restricted entitlement.
+
 ## Test
 
 ```sh
@@ -91,7 +106,7 @@ swift test
 | `project.yml` | XcodeGen spec for the Xcode project — the macOS app, iOS app, and widget extension targets. The `.xcodeproj` is generated from this, not committed. |
 | `Package.swift` | SwiftPM package exposing the `SugarbarCore`/`SugarbarUI` libraries consumed by both app targets. Source of truth for the core; `swift test` runs against it. |
 | `Sources/SugarbarCore/` | Source-agnostic domain + the LibreLinkUp client (auth, region redirect, fetch, polling, staleness), the Glooko client (web sign-in, dose fetch), and the meal analyzer (one Claude Messages API call, lenient JSON parsing). No AppKit/UIKit. |
-| `Sources/SugarbarUI/` | Shared SwiftUI presentation (band colours, `BarContent` text/glyph/tint, the history chart) consumed by both app targets. |
+| `Sources/SugarbarUI/` | Shared SwiftUI presentation (band colours, `BarContent` text/glyph/tint, the history chart, alert settings rows) and notification delivery for alerts, consumed by both app targets. |
 | `Sources/Sugarbar/` | The macOS app: menu-bar item, SwiftUI panel, settings, view model, app lifecycle. Built by the `Sugarbar` Xcode target. |
 | `Sources/SugarbarIOS/` | The iOS app: sign-in, foreground polling, best-effort `BGAppRefreshTask` background top-up, current-reading screen, meal photo logging (camera/library, Claude estimate, review, HealthKit write), App Group snapshot + WidgetKit reload. Built by the `SugarbarIOS` Xcode target. |
 | `Sources/SugarbarWidget/` | The WidgetKit extension: Home Screen (`systemSmall`/`systemMedium`, full colour) and Lock Screen (`accessoryCircular`/`accessoryRectangular`/`accessoryInline`, band conveyed by gauge fill/shape) glucose widgets. Reads the App Group snapshot only — no networking. Built by the `SugarbarWidget` Xcode target, embedded in `SugarbarIOS`. |
