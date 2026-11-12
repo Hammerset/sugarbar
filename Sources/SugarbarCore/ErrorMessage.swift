@@ -34,14 +34,14 @@ public extension Error {
                 return "Unexpected response from Glooko."
             }
         }
-        if let error = self as? MealAnalyzerError {
+        if let error = self as? ClaudeAPIError {
             switch error {
             case .invalidAPIKey:
-                return "Claude rejected the API key — check it in the Meals card."
+                return "Claude rejected the API key — check the key you entered."
             case .rateLimited:
                 return "Claude refused the request (rate-limit). Try again shortly."
             case .declined:
-                return "Claude declined to estimate this photo."
+                return "Claude declined this request."
             case let .httpError(status):
                 return "Claude returned an error (HTTP \(status))."
             case .unexpectedResponse:

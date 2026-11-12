@@ -8,13 +8,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let launchAtLogin = SMAppServiceLaunchAtLogin()
     private let settingsWindow = ManagedWindow(title: "Sugarbar Settings")
     private let disclaimerWindow = ManagedWindow(title: "Welcome to Sugarbar")
+    private let askClaudeWindow = ManagedWindow(title: "Ask Claude")
+    private var askClaude: AskClaudeModel?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
         ForegroundNotificationPresenter.shared.install()
-        statusItemController = StatusItemController(model: model) { [weak self] in
-            self?.openSettings()
-        }
+        statusItemController = StatusItemController(
+            model: model,
+            onAskClaude: { [weak self] in self?.openAskClaude() },
+            onOpenSettings: { [weak self] in self?.openSettings() }
+        )
         observeSleepWake()
         model.start()
         if model.needsDisclaimer { showDisclaimer() }
@@ -23,6 +27,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func openSettings() {
         settingsWindow.show {
             SettingsView(model: model, launchAtLogin: launchAtLogin)
+        }
+    }
+
+    private func openAskClaude() {
+        let askClaude = askClaude ?? model.makeAskClaudeModel()
+        self.askClaude = askClaude
+        askClaudeWindow.show {
+            AskClaudeWindowContent(model: askClaude) { [weak self] in self?.openSettings() }
         }
     }
 

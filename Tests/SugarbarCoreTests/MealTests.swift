@@ -34,14 +34,14 @@ private func messagesResponse(text: String, stopReason: String = "end_turn") -> 
     }
 
     @Test func rejectsTextWithoutAnObject() {
-        #expect(throws: MealAnalyzerError.unexpectedResponse) { try parseMealEstimate("I can't see any food here.") }
-        #expect(throws: MealAnalyzerError.unexpectedResponse) { try parseMealEstimate(#"{"items": []}"#) }
+        #expect(throws: ClaudeAPIError.unexpectedResponse) { try parseMealEstimate("I can't see any food here.") }
+        #expect(throws: ClaudeAPIError.unexpectedResponse) { try parseMealEstimate(#"{"items": []}"#) }
     }
 
     @Test func readsTextBlocksAndRefusals() throws {
         let estimate = try decodeMealEstimate(fromMessagesResponse: Data(messagesResponse(text: estimateJSON).utf8))
         #expect(estimate.carbsGrams == 62.5)
-        #expect(throws: MealAnalyzerError.declined) {
+        #expect(throws: ClaudeAPIError.declined) {
             try decodeMealEstimate(fromMessagesResponse: Data(messagesResponse(text: "", stopReason: "refusal").utf8))
         }
     }
@@ -78,7 +78,7 @@ private func messagesResponse(text: String, stopReason: String = "end_turn") -> 
         await transport.stub(host: "api.anthropic.com", path: "/v1/messages", status: 401, json: #"{"type":"error"}"#)
 
         let analyzer = MealAnalyzer(transport: transport)
-        await #expect(throws: MealAnalyzerError.invalidAPIKey) {
+        await #expect(throws: ClaudeAPIError.invalidAPIKey) {
             try await analyzer.estimate(imageJPEG: Data(), note: "", apiKey: "bad")
         }
     }

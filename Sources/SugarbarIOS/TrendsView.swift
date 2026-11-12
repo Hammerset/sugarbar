@@ -12,6 +12,8 @@ struct TrendsView: View {
     @State private var showClaudeKey = false
     @State private var showAlerts = false
     @State private var showTherapySettings = false
+    @State private var askClaude: AskClaudeModel?
+    @State private var showAskClaude = false
 
     private var thresholds: Thresholds { model.thresholds }
     private var series: [Reading] { model.chartSeries(window: window) }
@@ -46,6 +48,13 @@ struct TrendsView: View {
                     timeInRangeCard
                     insulinCard
                     mealsCard
+
+                    Button("Ask Claude", systemImage: "bubble.left.and.text.bubble.right") {
+                        askClaude = askClaude ?? model.makeAskClaudeModel()
+                        showAskClaude = true
+                    }
+                    .buttonStyle(.bordered)
+                    .frame(maxWidth: .infinity, alignment: .center)
 
                     Text("Not a medical device — for information only.")
                         .font(.caption2)
@@ -83,6 +92,11 @@ struct TrendsView: View {
             }
             .sheet(isPresented: $showTherapySettings) {
                 TherapySettingsView()
+            }
+            .sheet(isPresented: $showAskClaude) {
+                if let askClaude {
+                    AskClaudeSheet(model: model, askModel: askClaude)
+                }
             }
         }
     }

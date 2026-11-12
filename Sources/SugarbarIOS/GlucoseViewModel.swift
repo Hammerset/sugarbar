@@ -149,8 +149,19 @@ final class GlucoseViewModel {
     }
 
     func estimateMeal(imageJPEG: Data, note: String) async throws -> MealEstimate {
-        guard let apiKey = Self.resolveClaudeAPIKey(claudeKeyStore) else { throw MealAnalyzerError.invalidAPIKey }
+        guard let apiKey = Self.resolveClaudeAPIKey(claudeKeyStore) else { throw ClaudeAPIError.invalidAPIKey }
         return try await mealAnalyzer.estimate(imageJPEG: imageJPEG, note: note, apiKey: apiKey)
+    }
+
+    /// Therapy Settings are edited straight into the shared store, so read it fresh.
+    func makeAskClaudeModel(settingsStore: SettingsStore = UserDefaultsSettingsStore()) -> AskClaudeModel {
+        AskClaudeModel(
+            makeContext: { [historyStore, mealStore] in
+                historySummary(history: historyStore, meals: mealStore.load(), settings: settingsStore.load())
+            },
+            hasAPIKey: { [weak self] in self?.hasClaudeAPIKey ?? false },
+            apiKey: { [claudeKeyStore] in Self.resolveClaudeAPIKey(claudeKeyStore) }
+        )
     }
 
     func logMeal(_ meal: Meal) async {

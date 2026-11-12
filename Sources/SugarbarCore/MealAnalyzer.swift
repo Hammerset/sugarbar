@@ -1,6 +1,5 @@
 import Foundation
 
-public let claudeMessagesURL = URL(string: "https://api.anthropic.com/v1/messages")!
 public let mealAnalyzerModel = "claude-sonnet-5-5"
 
 /// Claude's carb estimate for a photo. A starting point for the user to review, never saved as-is.
@@ -20,41 +19,16 @@ public struct MealEstimate: Equatable, Sendable, Decodable {
     public var summary: String { items.joined(separator: ", ") }
 }
 
-public enum MealAnalyzerError: Error, Equatable, Sendable {
-    case invalidAPIKey
-    case rateLimited
-    case declined
-    case httpError(status: Int)
-    case unexpectedResponse
-}
-
 public actor MealAnalyzer {
-    private let transport: HTTPTransport
+    private let client: ClaudeClient
 
     public init(transport: HTTPTransport) {
-        self.transport = transport
+        self.client = ClaudeClient(transport: transport)
     }
 
     public func estimate(imageJPEG: Data, note: String, apiKey: String) async throws -> MealEstimate {
-        var request = URLRequest(url: claudeMessagesURL)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
-        request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
-        request.httpBody = try JSONSerialization.data(withJSONObject: mealRequestBody(imageJPEG: imageJPEG, note: note))
-
-        let response = try await transport.send(request)
-        switch response.status {
-        case 200...299:
-            break
-        case 401, 403:
-            throw MealAnalyzerError.invalidAPIKey
-        case 429:
-            throw MealAnalyzerError.rateLimited
-        default:
-            throw MealAnalyzerError.httpError(status: response.status)
-        }
-        return try decodeMealEstimate(fromMessagesResponse: response.body)
+        let reply = try await client.send(body: mealRequestBody(imageJPEG: imageJPEG, note: note), apiKey: apiKey)
+        return try parseMealEstimate(reply.text)
     }
 }
 
@@ -85,35 +59,17 @@ Reply with only a JSON object, no prose and no code fence, with exactly these ke
 """
 
 func decodeMealEstimate(fromMessagesResponse body: Data) throws -> MealEstimate {
-    let message = try JSONDecoder().decode(MessagesResponse.self, from: body)
-    if message.stopReason == "refusal" { throw MealAnalyzerError.declined }
-    let text = message.content.compactMap(\.text).joined()
-    return try parseMealEstimate(text)
+    try parseMealEstimate(ClaudeReply(messagesResponse: body).text)
 }
 
 /// Accepts the JSON object wherever the model put it: bare, fenced, or wrapped in a sentence.
 func parseMealEstimate(_ text: String) throws -> MealEstimate {
     guard let start = text.firstIndex(of: "{"), let end = text.lastIndex(of: "}"), start < end else {
-        throw MealAnalyzerError.unexpectedResponse
+        throw ClaudeAPIError.unexpectedResponse
     }
     let json = Data(text[start...end].utf8)
     guard let estimate = try? JSONDecoder().decode(MealEstimate.self, from: json) else {
-        throw MealAnalyzerError.unexpectedResponse
+        throw ClaudeAPIError.unexpectedResponse
     }
     return estimate
-}
-
-private struct MessagesResponse: Decodable {
-    struct Block: Decodable {
-        let type: String
-        let text: String?
-    }
-
-    let content: [Block]
-    let stopReason: String?
-
-    enum CodingKeys: String, CodingKey {
-        case content
-        case stopReason = "stop_reason"
-    }
 }
