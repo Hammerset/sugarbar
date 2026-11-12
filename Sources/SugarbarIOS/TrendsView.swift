@@ -9,6 +9,7 @@ struct TrendsView: View {
     @State private var selectedDate: Date?
     @State private var showGlookoSignIn = false
     @State private var showMealLog = false
+    @State private var showDoseLog = false
     @State private var showClaudeKey = false
     @State private var showAlerts = false
     @State private var showTherapySettings = false
@@ -79,6 +80,9 @@ struct TrendsView: View {
             }
             .sheet(isPresented: $showGlookoSignIn) {
                 GlookoSignInView(model: model)
+            }
+            .sheet(isPresented: $showDoseLog) {
+                DoseLogView(model: model)
             }
             .sheet(isPresented: $showMealLog) {
                 MealLogView(model: model)
@@ -167,14 +171,17 @@ struct TrendsView: View {
     @ViewBuilder
     private var insulinCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Insulin")
-                .font(.headline)
+            HStack {
+                Text("Insulin")
+                    .font(.headline)
+                Spacer()
+                Button("Log Dose", systemImage: "syringe") { showDoseLog = true }
+                    .buttonStyle(.bordered)
+            }
+            if model.isGlookoSignedIn || !model.chartDoses(window: window).isEmpty {
+                insulinTotalsRow
+            }
             if model.isGlookoSignedIn {
-                let totals = insulinTotals(model.chartDoses(window: window))
-                HStack(spacing: 0) {
-                    insulinStat(label: "Bolus", units: totals.bolus, tint: InsulinKind.bolus.tint)
-                    insulinStat(label: "Basal", units: totals.basal, tint: InsulinKind.basal.tint)
-                }
                 if let error = model.insulinSyncError {
                     Text(error)
                         .font(.footnote)
@@ -221,6 +228,14 @@ struct TrendsView: View {
                 Button("Add Claude API Key") { showClaudeKey = true }
                     .buttonStyle(.bordered)
             }
+        }
+    }
+
+    private var insulinTotalsRow: some View {
+        let totals = insulinTotals(model.chartDoses(window: window))
+        return HStack(spacing: 0) {
+            insulinStat(label: "Bolus", units: totals.bolus, tint: InsulinKind.bolus.tint)
+            insulinStat(label: "Basal", units: totals.basal, tint: InsulinKind.basal.tint)
         }
     }
 

@@ -1,13 +1,46 @@
 import Foundation
 
 /// Never pruned. Readings are de-duplicated by time; Doses by `id`, the latest copy winning.
+/// `doses(in:)` is already reconciled: a manual Dose superseded by its Glooko Dose is left out.
 public protocol HistoryStore: AnyObject, Sendable {
     func readings(in interval: ClosedRange<Date>) -> [Reading]
     func doses(in interval: ClosedRange<Date>) -> [InsulinDose]
     @discardableResult func append(readings: [Reading]) -> Int
     @discardableResult func append(doses: [InsulinDose]) -> Int
+    func delete(dose: InsulinDose)
     func glookoCursor() -> Date?
     func setGlookoCursor(_ date: Date)
+}
+
+public extension HistoryStore {
+    /// Delete-then-append, so an edit that moves a Dose into another month leaves no copy behind.
+    func replace(_ old: InsulinDose, with new: InsulinDose) {
+        delete(dose: old)
+        append(doses: [new])
+    }
+
+    func recentManualDoses(now: Date, lookback: TimeInterval = 48 * 3600) -> [InsulinDose] {
+        doses(in: now.addingTimeInterval(-lookback)...now.addingTimeInterval(86400))
+            .filter(\.isManual)
+            .reversed()
+    }
+
+    func latestInsulinName(kind: InsulinKind, now: Date, lookback: TimeInterval = 30 * 86400) -> String? {
+        doses(in: now.addingTimeInterval(-lookback)...now)
+            .last { $0.kind == kind && $0.insulinName != nil }?
+            .insulinName
+    }
+}
+
+/// Reconciliation must see the Doses just outside the interval, or a manual Dose at its edge
+/// would lose the Glooko Dose that supersedes it.
+func reconciledDoses(in interval: ClosedRange<Date>, raw: (ClosedRange<Date>) -> [InsulinDose]) -> [InsulinDose] {
+    let widened = interval.lowerBound.addingTimeInterval(-manualDoseMatchTolerance)...interval.upperBound.addingTimeInterval(manualDoseMatchTolerance)
+    return reconcileDoses(raw(widened)).filter { interval.contains($0.timestamp) }
+}
+
+struct DoseTombstone: Codable {
+    let deletedDoseId: String
 }
 
 /// LibreLinkUp and Glooko stamp the same sensor Reading a few seconds apart.
@@ -75,9 +108,9 @@ public final class FileHistoryStore: HistoryStore, @unchecked Sendable {
 
     public func doses(in interval: ClosedRange<Date>) -> [InsulinDose] {
         lock.withLock {
-            MonthKey.covering(interval)
-                .flatMap { loadedDoses($0).values.filter { interval.contains($0.timestamp) } }
-                .sorted { $0.timestamp < $1.timestamp }
+            reconciledDoses(in: interval) { widened in
+                MonthKey.covering(widened).flatMap { loadedDoses($0).values.filter { widened.contains($0.timestamp) } }
+            }
         }
     }
 
@@ -126,6 +159,18 @@ public final class FileHistoryStore: HistoryStore, @unchecked Sendable {
         }
     }
 
+    public func delete(dose: InsulinDose) {
+        lock.withLock {
+            let key = MonthKey(dose.timestamp)
+            var month = loadedDoses(key)
+            guard month.removeValue(forKey: dose.id) != nil,
+                  let line = try? JSONEncoder().encode(DoseTombstone(deletedDoseId: dose.id))
+            else { return }
+            doseMonths[key] = month
+            appendLines([String(decoding: line, as: UTF8.self)], to: dosesFile(key))
+        }
+    }
+
     public func glookoCursor() -> Date? {
         guard let text = try? String(contentsOf: cursorFile, encoding: .utf8),
               let seconds = TimeInterval(text.trimmingCharacters(in: .whitespacesAndNewlines))
@@ -161,7 +206,12 @@ public final class FileHistoryStore: HistoryStore, @unchecked Sendable {
         let decoder = JSONDecoder()
         var month: [String: InsulinDose] = [:]
         for line in lines(of: dosesFile(key)) {
-            if let dose = try? decoder.decode(InsulinDose.self, from: Data(line.utf8)) { month[dose.id] = dose }
+            let data = Data(line.utf8)
+            if let dose = try? decoder.decode(InsulinDose.self, from: data) {
+                month[dose.id] = dose
+            } else if let tombstone = try? decoder.decode(DoseTombstone.self, from: data) {
+                month[tombstone.deletedDoseId] = nil
+            }
         }
         doseMonths[key] = month
         return month
@@ -199,8 +249,12 @@ public final class InMemoryHistoryStore: HistoryStore, @unchecked Sendable {
 
     public func doses(in interval: ClosedRange<Date>) -> [InsulinDose] {
         lock.withLock {
-            storedDoses.values.filter { interval.contains($0.timestamp) }.sorted { $0.timestamp < $1.timestamp }
+            reconciledDoses(in: interval) { widened in storedDoses.values.filter { widened.contains($0.timestamp) } }
         }
+    }
+
+    public func delete(dose: InsulinDose) {
+        lock.withLock { _ = storedDoses.removeValue(forKey: dose.id) }
     }
 
     @discardableResult
