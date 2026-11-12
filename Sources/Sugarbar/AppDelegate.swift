@@ -10,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let disclaimerWindow = ManagedWindow(title: "Welcome to Sugarbar")
     private let askClaudeWindow = ManagedWindow(title: "Ask Claude")
     private var askClaude: AskClaudeModel?
+    private let mealWindow = ManagedWindow(title: "Log Meal")
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -17,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItemController = StatusItemController(
             model: model,
             onAskClaude: { [weak self] in self?.openAskClaude() },
+            onLogMeal: { [weak self] in self?.openMealLog() },
             onOpenSettings: { [weak self] in self?.openSettings() }
         )
         observeSleepWake()
@@ -35,6 +37,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.askClaude = askClaude
         askClaudeWindow.show {
             AskClaudeWindowContent(model: askClaude) { [weak self] in self?.openSettings() }
+        }
+    }
+
+    private func openMealLog() {
+        mealWindow.show {
+            MealLogWindow(model: model) { [weak self] in self?.openSettings() }
         }
     }
 

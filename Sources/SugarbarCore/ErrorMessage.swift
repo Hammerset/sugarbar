@@ -48,6 +48,9 @@ public extension Error {
                 return "Unexpected response from Claude."
             }
         }
+        if self as? MealEstimateError == .nothingToEstimate {
+            return "Add a photo or describe the meal first."
+        }
         if let urlError = self as? URLError {
             switch urlError.code {
             case .notConnectedToInternet, .networkConnectionLost, .cannotConnectToHost,

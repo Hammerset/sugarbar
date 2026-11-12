@@ -1,25 +1,17 @@
 import PhotosUI
 import SwiftUI
 import SugarbarCore
+import SugarbarUI
 
 struct MealLogView: View {
     let model: GlucoseViewModel
     @Environment(\.dismiss) private var dismiss
 
-    @State private var image: UIImage?
+    @State private var draft = MealDraft()
     @State private var photoItem: PhotosPickerItem?
     @State private var showCamera = false
-    @State private var note = ""
-    @State private var timestamp = Date()
-    @State private var estimate: MealEstimate?
-    @State private var carbsText = ""
-    @State private var summary = ""
     @State private var isEstimating = false
     @State private var errorMessage: String?
-
-    private var carbsGrams: Double? {
-        Double(carbsText.replacingOccurrences(of: ",", with: ".").trimmingCharacters(in: .whitespaces))
-    }
 
     var body: some View {
         NavigationStack {
@@ -27,8 +19,9 @@ struct MealLogView: View {
                 photoSection
                 estimateSection
                 reviewSection
+                recentSection
             }
-            .navigationTitle("Log Meal")
+            .navigationTitle(draft.editing == nil ? "Log Meal" : "Edit Meal")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -36,27 +29,27 @@ struct MealLogView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") { save() }
-                        .disabled((carbsGrams ?? 0) <= 0)
+                        .disabled(!draft.isValid)
                 }
             }
             .onChange(of: photoItem) { _, item in
                 guard let item else { return }
                 Task {
-                    if let data = try? await item.loadTransferable(type: Data.self), let picked = UIImage(data: data) {
-                        image = picked
-                    }
+                    if let data = try? await item.loadTransferable(type: Data.self) { setPhoto(data) }
                 }
             }
             .fullScreenCover(isPresented: $showCamera) {
-                CameraPicker { image = $0 }
-                    .ignoresSafeArea()
+                CameraPicker { image in
+                    if let data = image.jpegData(compressionQuality: 0.9) { setPhoto(data) }
+                }
+                .ignoresSafeArea()
             }
         }
     }
 
     private var photoSection: some View {
         Section {
-            if let image {
+            if let jpeg = draft.photoJPEG, let image = UIImage(data: jpeg) {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFit()
@@ -72,70 +65,88 @@ struct MealLogView: View {
                 }
             }
             .buttonStyle(.bordered)
-            TextField("Note, e.g. “ate half the bread”", text: $note, axis: .vertical)
+            TextField("Describe the meal, or add a note to the photo", text: $draft.note, axis: .vertical)
         } footer: {
-            Text("Dictate the note with the keyboard's microphone.")
+            Text("A photo, a description, or both. Dictate with the keyboard's microphone.")
         }
     }
 
     private var estimateSection: some View {
         Section {
-            Button {
-                Task { await runEstimate() }
-            } label: {
-                if isEstimating {
-                    ProgressView().frame(maxWidth: .infinity)
-                } else {
-                    Text(estimate == nil ? "Estimate Carbs with Claude" : "Estimate Again")
-                        .frame(maxWidth: .infinity)
+            if model.hasClaudeAPIKey {
+                Button {
+                    Task { await runEstimate() }
+                } label: {
+                    if isEstimating {
+                        ProgressView().frame(maxWidth: .infinity)
+                    } else {
+                        Text(draft.estimate == nil ? "Estimate Carbs with Claude" : "Estimate Again")
+                            .frame(maxWidth: .infinity)
+                    }
                 }
+                .disabled(!draft.canEstimate || isEstimating)
+            } else {
+                Text("Add a Claude API key in the Meals card to get an Estimate. You can still type the grams yourself.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
-            .disabled(image == nil || isEstimating)
             if let errorMessage {
                 Text(errorMessage)
                     .font(.footnote)
                     .foregroundStyle(.orange)
             }
-            if let estimate {
-                ForEach(estimate.items, id: \.self) { item in
-                    Text(item)
-                }
-                if !estimate.assumptions.isEmpty {
-                    Text("Assumed: " + estimate.assumptions.joined(separator: "; "))
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-                Text("Confidence: \(estimate.confidence)")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+            if let estimate = draft.estimate {
+                MealEstimateDetails(estimate: estimate)
             }
         }
     }
 
     private var reviewSection: some View {
         Section {
-            LabeledContent("Carbs (g)") {
-                TextField("0", text: $carbsText)
-                    .keyboardType(.decimalPad)
-                    .multilineTextAlignment(.trailing)
-            }
-            TextField("Description", text: $summary)
-            DatePicker("Time", selection: $timestamp, in: ...Date(), displayedComponents: [.date, .hourAndMinute])
+            MealReviewFields(draft: $draft)
         } footer: {
-            Text("Claude's estimate is a starting point — check the grams before saving. Not a medical device.")
+            Text(MealReviewFields.note)
         }
     }
 
+    @ViewBuilder
+    private var recentSection: some View {
+        let recent = recentMeals(model.meals)
+        if !recent.isEmpty {
+            Section {
+                ForEach(recent) { meal in
+                    Button {
+                        draft = MealDraft(editing: meal)
+                        errorMessage = nil
+                    } label: {
+                        Text(mealSummaryLine(meal))
+                            .foregroundStyle(meal.id == draft.editing?.id ? Color.accentColor : .primary)
+                    }
+                }
+                .onDelete { offsets in
+                    for meal in offsets.map({ recent[$0] }) {
+                        Task { await model.deleteMeal(meal) }
+                        if meal.id == draft.editing?.id { draft = MealDraft() }
+                    }
+                }
+            } header: {
+                Text("Recent Meals")
+            } footer: {
+                Text("Tap to edit, swipe to delete. Editing or deleting a meal also updates its Apple Health entry.")
+            }
+        }
+    }
+
+    private func setPhoto(_ data: Data) {
+        errorMessage = draft.setPhoto(data) ? nil : "Couldn't read that image."
+    }
+
     private func runEstimate() async {
-        guard let image, let jpeg = jpegData(for: image) else { return }
         isEstimating = true
         errorMessage = nil
         defer { isEstimating = false }
         do {
-            let result = try await model.estimateMeal(imageJPEG: jpeg, note: note)
-            estimate = result
-            carbsText = formatGrams(result.carbsGrams)
-            if summary.isEmpty { summary = result.summary }
+            draft.apply(try await model.estimateMeal(draft))
         } catch {
             logDiagnostic("mealEstimate", error)
             errorMessage = error.sugarbarMessage
@@ -143,24 +154,10 @@ struct MealLogView: View {
     }
 
     private func save() {
-        guard let carbsGrams, carbsGrams > 0 else { return }
-        let trimmed = summary.trimmingCharacters(in: .whitespacesAndNewlines)
-        let meal = Meal(timestamp: timestamp, carbsGrams: carbsGrams, summary: trimmed.isEmpty ? "Meal" : trimmed)
-        Task { await model.logMeal(meal) }
+        guard let meal = draft.meal() else { return }
+        Task { await model.saveMeal(meal) }
         dismiss()
     }
-}
-
-/// Phone photos are 12 MP; Claude only needs enough pixels to recognise the plate.
-private func jpegData(for image: UIImage, maxDimension: CGFloat = 1280) -> Data? {
-    let scale = min(1, maxDimension / max(image.size.width, image.size.height))
-    let size = CGSize(width: image.size.width * scale, height: image.size.height * scale)
-    let format = UIGraphicsImageRendererFormat.default()
-    format.scale = 1
-    let resized = UIGraphicsImageRenderer(size: size, format: format).image { _ in
-        image.draw(in: CGRect(origin: .zero, size: size))
-    }
-    return resized.jpegData(compressionQuality: 0.75)
 }
 
 private struct CameraPicker: UIViewControllerRepresentable {

@@ -16,7 +16,7 @@ struct ClaudeAPIKeyView: View {
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                 } footer: {
-                    Text("A pay-per-use key from console.anthropic.com. Meal photos are sent to Claude to estimate carbohydrates, and Ask Claude sends a summary of your glucose, dose and meal data; the key is stored in the Keychain on this phone only.")
+                    Text("A pay-per-use key from console.anthropic.com. Meal photos and descriptions are sent to Claude to estimate carbohydrates, and Ask Claude sends a summary of your glucose, dose and meal data; the key is stored in the Keychain on this phone only.")
                 }
             }
             .navigationTitle("Claude API Key")

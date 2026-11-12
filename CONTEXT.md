@@ -65,11 +65,11 @@ A connected insulin pen (NovoPen 6) whose memory is synced to the Glooko app ove
 _Avoid_: device (too generic), smart pen.
 
 **Meal**:
-Carbohydrates eaten at a point in time, in grams, with a short description. Logged from a photo on the phone: Claude proposes an **Estimate**, the user confirms or edits the grams, and only the confirmed figure is saved.
+Carbohydrates eaten at a point in time, in grams, with a short description. Logged on the phone or the Mac from a photo, a description, or both: Claude proposes an **Estimate**, the user confirms or edits the grams, and only the confirmed figure is saved. The user can also skip the Estimate and type the grams. A saved Meal can be edited or deleted.
 _Avoid_: food log, entry, carbs (the number, not the event).
 
 **Estimate**:
-Claude's proposed carb figure for a Meal photo, with the foods it saw, what it assumed, and a confidence. Never saved as-is — a starting point for the review step.
+Claude's proposed carb figure for a Meal photo and/or description, with the foods it identified, what it assumed, and a confidence. Never saved as-is — a starting point for the review step.
 _Avoid_: result, answer, prediction.
 
 **History**:
@@ -124,11 +124,11 @@ _Avoid_: assistant, coach, advice.
 - A **Dose** is independent of any **Reading**; the graph overlays Doses on Readings by time only.
 - Doses are only as fresh as the last **Pen** sync — there is no Staleness notion for them.
 - A **Meal** is independent of any **Reading** or **Dose**; the graph overlays all three by time only.
-- A **Meal** always passes through an **Estimate** and a user review; the stored Meal is the user's figure, not Claude's.
+- An **Estimate** never becomes a **Meal** without a user review; the stored Meal is the user's figure, not Claude's.
 - A **Forecast** needs complete **Therapy Settings** and a fresh **Reading**; there is none from a Stale Reading, a LO/HI Reading, or during a **Sensor State**.
 - A **Forecast** counts only **Bolus** Doses; **Basal** is assumed to cover background needs. A Pen Dose not yet synced to Glooko is missing from it unless it was entered as a **Manual Dose**, so a Forecast right after an unsynced, unentered Bolus reads too high.
 - An **Ask Claude** conversation is pinned to the **History Summary** built for its first question; Readings that arrive later are not in it until **Start Over**.
-- Meals live in the App Group (phone, Mac panel, widget) and are mirrored to Apple Health. Nothing flows from Meals to Glooko.
+- Meals live in each device's App Group (phone and widget; the Mac on its own). Phone Meals are mirrored to Apple Health, and editing or deleting one updates or removes its Health sample; Mac Meals are not. Until sync exists, a Meal logged on one device is not seen on the other. Nothing flows from Meals to Glooko.
 
 ## Example dialogue
 

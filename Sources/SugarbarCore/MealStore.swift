@@ -5,6 +5,23 @@ public protocol MealStore: Sendable {
     func save(_ meals: [Meal])
 }
 
+extension MealStore {
+    /// Replaces the Meal with the same id, or adds it. Returns every Meal, oldest first.
+    @discardableResult
+    public func upsert(_ meal: Meal) -> [Meal] {
+        let meals = (load().filter { $0.id != meal.id } + [meal]).sorted { $0.timestamp < $1.timestamp }
+        save(meals)
+        return meals
+    }
+
+    @discardableResult
+    public func delete(id: UUID) -> [Meal] {
+        let meals = load().filter { $0.id != id }
+        save(meals)
+        return meals
+    }
+}
+
 /// Meals live in the App Group suite so the Mac panel and the widget can read what the phone logged.
 public final class UserDefaultsMealStore: MealStore, @unchecked Sendable {
     private static let key = "shared.meals"

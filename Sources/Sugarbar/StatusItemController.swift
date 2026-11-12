@@ -6,7 +6,12 @@ final class StatusItemController: NSObject {
     private let statusItem: NSStatusItem
     private let popover: NSPopover
 
-    init(model: BarViewModel, onAskClaude: @escaping () -> Void, onOpenSettings: @escaping () -> Void) {
+    init(
+        model: BarViewModel,
+        onAskClaude: @escaping () -> Void,
+        onLogMeal: @escaping () -> Void,
+        onOpenSettings: @escaping () -> Void
+    ) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         popover = NSPopover()
         super.init()
@@ -21,6 +26,10 @@ final class StatusItemController: NSObject {
             onAskClaude: { [weak self] in
                 self?.popover.performClose(nil)
                 onAskClaude()
+            },
+            onLogMeal: { [weak self] in
+                self?.popover.performClose(nil)
+                onLogMeal()
             }
         )
         popover.contentViewController = NSHostingController(rootView: panel)
