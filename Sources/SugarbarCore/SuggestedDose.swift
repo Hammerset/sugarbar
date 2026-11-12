@@ -194,6 +194,33 @@ public func suggestDose(_ input: DoseSuggestionInput) -> DoseSuggestion {
     ))
 }
 
+/// How much of History's Doses the app can vouch for: pen Doses reach it only after an NFC sync to Glooko.
+public struct DoseCoverage: Equatable, Sendable {
+    public let newestPenDose: Date?
+    /// The newest pen Dose is over 6 hours old (or there is none) and no Dose was entered in sugarbar since,
+    /// so a recent injection may be missing from Insulin on Board.
+    public let mayBeMissingDoses: Bool
+
+    public init(newestPenDose: Date?, mayBeMissingDoses: Bool) {
+        self.newestPenDose = newestPenDose
+        self.mayBeMissingDoses = mayBeMissingDoses
+    }
+
+    public static let note = "Insulin on Board counts only Doses in sugarbar. Log any recent Dose that is not here yet."
+}
+
+public let penSyncGapThreshold: TimeInterval = 6 * 3600
+
+public func doseCoverage(_ doses: [InsulinDose], now: Date) -> DoseCoverage {
+    let known = doses.filter { $0.timestamp <= now }
+    let newestPen = known.filter { !$0.isManual && $0.isFromPen }.map(\.timestamp).max()
+    if let newestPen, now.timeIntervalSince(newestPen) <= penSyncGapThreshold {
+        return DoseCoverage(newestPenDose: newestPen, mayBeMissingDoses: false)
+    }
+    let enteredSince = known.contains { $0.isManual && $0.timestamp > (newestPen ?? .distantPast) }
+    return DoseCoverage(newestPenDose: newestPen, mayBeMissingDoses: !enteredSince)
+}
+
 /// The tolerance keeps a value like 5.9999999 from losing a whole step to floating-point error.
 public func roundDown(_ units: Double, toStep step: Double) -> Double {
     guard step > 0 else { return units }

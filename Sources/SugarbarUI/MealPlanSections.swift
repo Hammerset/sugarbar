@@ -6,6 +6,7 @@ public struct MealPlanSections: View {
     @Binding var draft: MealDraft
     let suggestion: DoseSuggestion
     let pendingTherapySuggestions: [TherapySuggestion]
+    let doseCoverage: DoseCoverage?
     let penStep: Double
     let canAskClaude: Bool
     let isLoadingStrategy: Bool
@@ -14,11 +15,13 @@ public struct MealPlanSections: View {
     let onLogDose: () -> Void
     let onSavePlan: () -> Void
     let onOpenTherapySettings: () -> Void
+    let onLogEarlierDose: () -> Void
 
     public init(
         draft: Binding<MealDraft>,
         suggestion: DoseSuggestion,
         pendingTherapySuggestions: [TherapySuggestion] = [],
+        doseCoverage: DoseCoverage? = nil,
         penStep: Double,
         canAskClaude: Bool,
         isLoadingStrategy: Bool,
@@ -26,11 +29,13 @@ public struct MealPlanSections: View {
         onRequestStrategy: @escaping () -> Void,
         onLogDose: @escaping () -> Void,
         onSavePlan: @escaping () -> Void,
-        onOpenTherapySettings: @escaping () -> Void
+        onOpenTherapySettings: @escaping () -> Void,
+        onLogEarlierDose: @escaping () -> Void
     ) {
         _draft = draft
         self.suggestion = suggestion
         self.pendingTherapySuggestions = pendingTherapySuggestions
+        self.doseCoverage = doseCoverage
         self.penStep = penStep
         self.canAskClaude = canAskClaude
         self.isLoadingStrategy = isLoadingStrategy
@@ -39,11 +44,12 @@ public struct MealPlanSections: View {
         self.onLogDose = onLogDose
         self.onSavePlan = onSavePlan
         self.onOpenTherapySettings = onOpenTherapySettings
+        self.onLogEarlierDose = onLogEarlierDose
     }
 
     public var body: some View {
         Section {
-            SuggestedDoseRows(suggestion: suggestion)
+            SuggestedDoseRows(suggestion: suggestion, doseCoverage: doseCoverage, onLogEarlierDose: onLogEarlierDose)
             ForEach(pendingTherapySuggestions, id: \.quantity) { pending in
                 Label {
                     Text("Not used yet: " + pending.text)
@@ -142,9 +148,13 @@ public struct MealPlanSections: View {
 /// The parts of the app's calculation, or why there is none.
 public struct SuggestedDoseRows: View {
     let suggestion: DoseSuggestion
+    let doseCoverage: DoseCoverage?
+    let onLogEarlierDose: () -> Void
 
-    public init(suggestion: DoseSuggestion) {
+    public init(suggestion: DoseSuggestion, doseCoverage: DoseCoverage? = nil, onLogEarlierDose: @escaping () -> Void = {}) {
         self.suggestion = suggestion
+        self.doseCoverage = doseCoverage
+        self.onLogEarlierDose = onLogEarlierDose
     }
 
     public var body: some View {
@@ -157,6 +167,7 @@ public struct SuggestedDoseRows: View {
             part("Meal", "\(formatGrams(dose.carbsGrams)) g ÷ \(number(dose.carbRatio)) g/u", dose.mealUnits)
             part("Correction", "(\(formatMmolPerL(dose.currentGlucose)) − \(formatMmolPerL(dose.targetGlucose))) ÷ \(number(dose.insulinSensitivity))", dose.correctionUnits)
             part("Insulin on board", "of \(String(format: "%.1f", dose.insulinOnBoard)) u", -dose.insulinOnBoardDeduction)
+            missingDosesNote
             Text("Using your Therapy Settings: carb ratio \(number(dose.carbRatio)) g per unit, insulin sensitivity \(number(dose.insulinSensitivity)) mmol/L per unit, target \(formatMmolPerL(dose.targetGlucose)).")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
@@ -168,6 +179,21 @@ public struct SuggestedDoseRows: View {
                 Text(reason.message)
                     .foregroundStyle(reason == .glucoseLow ? .orange : .secondary)
             }
+        }
+    }
+
+    private var missingDosesNote: some View {
+        let prominent = doseCoverage?.mayBeMissingDoses == true
+        return VStack(alignment: .leading, spacing: 4) {
+            Text(DoseCoverage.note)
+                .font(prominent ? .callout.weight(.semibold) : .footnote)
+                .foregroundStyle(prominent ? Color.orange : Color.secondary)
+            if prominent, let newest = doseCoverage?.newestPenDose {
+                Text("Newest pen Dose from Glooko: \(newest.formatted(.relative(presentation: .named))).")
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+            }
+            Button("Log an Earlier Dose…", action: onLogEarlierDose)
         }
     }
 

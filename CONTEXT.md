@@ -73,7 +73,7 @@ A Meal described before eating it, with the dose the user settled on, how much o
 _Avoid_: draft, pending meal, future meal.
 
 **Suggested Dose**:
-The app's calculation of a Bolus for a Meal Plan: carbs ÷ carb ratio, plus (current glucose − target) ÷ insulin sensitivity (negative below target), minus Insulin on Board (never more than the first two add up to), never below zero, capped at the maximum single dose and rounded down to the pen step. Every part is shown. Withheld without Therapy Settings, a fresh Reading, during a Sensor State, at LO/HI, and when glucose is Low (treat the low first). A calculation for the user to check, never logged until they log the Dose.
+The app's calculation of a Bolus for a Meal Plan: carbs ÷ carb ratio, plus (current glucose − target) ÷ insulin sensitivity (negative below target), minus Insulin on Board (never more than the first two add up to), never below zero, capped at the maximum single dose and rounded down to the pen step. Every part is shown. Withheld without Therapy Settings, a fresh Reading, during a Sensor State, at LO/HI, and when glucose is Low (treat the low first). A calculation for the user to check, never logged until they log the Dose. Its Insulin on Board counts only Doses in sugarbar, so the card always says so and offers to log an earlier Dose, in orange when the newest Glooko pen Dose is over 6 hours old and nothing was entered since.
 _Avoid_: recommendation, prescription, bolus advice.
 
 **Dose Settings**:
@@ -81,7 +81,7 @@ What the Suggested Dose aims for and how it is rounded: target glucose (default 
 _Avoid_: bolus settings, calculator settings.
 
 **Strategy**:
-Claude's short advice for a Meal Plan given the Suggested Dose, the Estimate and its absorption speed, current glucose and Trend, the Forecast and recent History: when to inject relative to eating, whether and how to split the dose, what to watch for, when to check again, and cautions. It may recommend a different amount only with a stated reason, and the app then shows both side by side.
+Claude's short advice for a Meal Plan given the Suggested Dose, the Estimate and its absorption speed, current glucose and Trend, the Forecast and recent History: when to inject relative to eating, whether and how to split the dose, what to watch for, when to check again, and cautions. It may recommend a different amount only with a stated reason, and the app then shows both side by side. The app enforces the limits itself: an amount that is negative, off the pen step, above the maximum single dose, or more than 20% (or one pen step, whichever is larger) above the Suggested Dose is discarded with a caution saying so, and there is no Claude amount at all when the Suggested Dose is withheld.
 _Avoid_: plan (that is the Meal Plan), coaching.
 
 **Estimate**:

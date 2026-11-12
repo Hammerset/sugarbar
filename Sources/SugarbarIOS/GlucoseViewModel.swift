@@ -248,6 +248,12 @@ final class GlucoseViewModel {
         )
     }
 
+    var doseCoverage: DoseCoverage {
+        _ = historyRevision
+        let now = Date()
+        return SugarbarCore.doseCoverage(historyStore.doses(in: now.addingTimeInterval(-7 * 86400)...now), now: now)
+    }
+
     func doseSuggestion(carbs: Double) -> DoseSuggestion {
         suggestDose(DoseSuggestionInput(
             carbsGrams: carbs,
@@ -279,6 +285,7 @@ final class GlucoseViewModel {
             latest: latest,
             forecast: forecast,
             history: historySummary(history: historyStore, meals: mealStore.load(), settings: settings, forecast: forecast, days: mealStrategyHistoryDays),
+            doseCoverage: doseCoverage,
             now: Date()
         )
         return try await mealStrategist.strategy(for: context, apiKey: apiKey)

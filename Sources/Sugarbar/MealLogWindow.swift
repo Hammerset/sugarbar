@@ -13,6 +13,7 @@ struct MealLogWindow: View {
     @State private var isLoadingStrategy = false
     @State private var strategyError: String?
     @State private var doseDraft: DoseDraft?
+    @State private var doseCountsTowardPlan = true
     @State private var isEstimating = false
     @State private var errorMessage: String?
     @State private var showsFileImporter = false
@@ -44,6 +45,7 @@ struct MealLogWindow: View {
                         draft: $draft,
                         suggestion: model.doseSuggestion(carbs: draft.carbsGrams),
                         pendingTherapySuggestions: model.therapySuggestions,
+                        doseCoverage: model.doseCoverage,
                         penStep: model.settings.dosing.penStep,
                         canAskClaude: model.hasClaudeAPIKey,
                         isLoadingStrategy: isLoadingStrategy,
@@ -51,7 +53,8 @@ struct MealLogWindow: View {
                         onRequestStrategy: { Task { await runStrategy() } },
                         onLogDose: openDoseEntry,
                         onSavePlan: { save(as: .planned) },
-                        onOpenTherapySettings: onOpenSettings
+                        onOpenTherapySettings: onOpenSettings,
+                        onLogEarlierDose: openEarlierDoseEntry
                     )
                     if doseDraft != nil { doseSection }
                 }
@@ -283,7 +286,7 @@ struct MealLogWindow: View {
                     .disabled(doseDraft?.isValid != true)
             }
         } header: {
-            Text("Log Dose")
+            Text(doseCountsTowardPlan ? "Log Dose" : "Log an Earlier Dose")
         } footer: {
             Text(DoseEntryFields.note)
                 .foregroundStyle(.secondary)
@@ -320,6 +323,12 @@ struct MealLogWindow: View {
         dose.units = draft.unitsToLogNow
         dose.kind = .bolus
         doseDraft = dose
+        doseCountsTowardPlan = true
+    }
+
+    private func openEarlierDoseEntry() {
+        doseDraft = DoseDraft()
+        doseCountsTowardPlan = false
     }
 
     /// Logging part of the plan's dose keeps the plan, so what is left stays visible as a reminder.
@@ -328,7 +337,7 @@ struct MealLogWindow: View {
               let dose = entry.dose(defaultName: model.defaultInsulinName(for: entry.kind)) else { return }
         model.saveManualDose(dose, replacing: nil)
         doseDraft = nil
-        guard dose.kind == .bolus else { return }
+        guard doseCountsTowardPlan, dose.kind == .bolus else { return }
         draft.takenUnits += dose.units
         let state: MealState = draft.editing?.isEaten == true ? .eaten : .planned
         guard let meal = draft.meal(state: state) else { return }

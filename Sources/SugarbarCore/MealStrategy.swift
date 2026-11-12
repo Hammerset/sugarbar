@@ -86,6 +86,7 @@ public struct MealStrategyContext: Sendable {
     public var latest: Reading?
     public var forecast: Forecast?
     public var history: String
+    public var doseCoverage: DoseCoverage?
     public var now: Date
 
     public init(
@@ -99,6 +100,7 @@ public struct MealStrategyContext: Sendable {
         latest: Reading?,
         forecast: Forecast?,
         history: String,
+        doseCoverage: DoseCoverage? = nil,
         now: Date
     ) {
         self.description = description
@@ -111,6 +113,7 @@ public struct MealStrategyContext: Sendable {
         self.latest = latest
         self.forecast = forecast
         self.history = history
+        self.doseCoverage = doseCoverage
         self.now = now
     }
 }
@@ -127,7 +130,7 @@ public actor MealStrategist {
 
     public func strategy(for context: MealStrategyContext, apiKey: String) async throws -> MealStrategy {
         let reply = try await client.send(body: mealStrategyRequestBody(context), apiKey: apiKey, timeout: 180)
-        return try parseMealStrategy(reply.text, appUnits: context.suggestion.dose?.units)
+        return try parseMealStrategy(reply.text, appUnits: context.suggestion.dose?.units, dosing: context.dosing)
     }
 }
 
@@ -156,7 +159,8 @@ Reply with only a JSON object, no prose and no code fence, with these keys:
 
 Rules:
 - Start from the app's calculation. Recommend a different total only for a specific reason you can point to in the data (a falling or rising Trend, repeated lows or late highs after similar meals, a lot of fat or protein, a low-confidence carb estimate), keep the difference modest, and always fill differenceReason when you do.
-- Never exceed the maximum single dose. Use multiples of the pen step for every amount.
+- Never exceed the maximum single dose, never go above the app's calculation by more than 20% or one pen step (whichever is larger), and use multiples of the pen step for every amount. The app discards any amount outside these limits.
+- Insulin on Board only includes Doses the app knows about. If the data says a recent injection may be missing, put that first in cautions.
 - Suggest a split only for slow meals (high fat or protein, slow absorption) or when the history shows late rises; nowUnits + laterUnits must equal recommendedUnits.
 - Inject closer to the meal, or at the first bite, when glucose is low-normal or falling; allow a longer pre-bolus when it is high or rising and the meal is fast.
 - If no dose was calculated, do not invent one: set recommendedUnits to null, and give timing and what to watch for based on why it was withheld (for example treat a low first).
@@ -215,6 +219,18 @@ public func mealStrategyPrompt(_ context: MealStrategyContext) -> String {
     } else {
         lines.append("No Forecast available.")
     }
+    if let coverage = context.doseCoverage {
+        var line = "Insulin on Board counts only Doses sugarbar knows about; pen Doses arrive only after the pen is synced to Glooko over NFC, and the user may also enter them by hand. "
+        if let newest = coverage.newestPenDose {
+            line += "Newest synced pen Dose: \(hoursAgo(newest, now: context.now)) ago."
+        } else {
+            line += "No synced pen Dose in the last week."
+        }
+        if coverage.mayBeMissingDoses {
+            line += " No Dose has been entered in sugarbar since, so a recent injection may be missing and Insulin on Board may be too low."
+        }
+        lines.append(line)
+    }
 
     lines.append("")
     lines.append("# Recent history")
@@ -223,8 +239,8 @@ public func mealStrategyPrompt(_ context: MealStrategyContext) -> String {
 }
 
 /// Accepts the JSON object wherever the model put it; any other non-empty reply becomes plain text.
-/// A total that differs from `appUnits` without a reason is dropped.
-func parseMealStrategy(_ text: String, appUnits: Double?) throws -> MealStrategy {
+/// Claude's amounts survive only within the app's limits; see `strategyAmountProblem`.
+func parseMealStrategy(_ text: String, appUnits: Double?, dosing: DosingSettings) throws -> MealStrategy {
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { throw ClaudeAPIError.unexpectedResponse }
     guard let start = trimmed.firstIndex(of: "{"), let end = trimmed.lastIndex(of: "}"), start < end,
@@ -249,14 +265,58 @@ func parseMealStrategy(_ text: String, appUnits: Double?) throws -> MealStrategy
             reason: string(split["reason"])
         )
     }
-    if strategy.differs(from: appUnits), strategy.differenceReason == nil {
-        strategy.recommendedUnits = nil
-        strategy.split = nil
+    if strategy.recommendedUnits != nil || strategy.split != nil {
+        let check = checkStrategyAmounts(strategy, appUnits: appUnits, dosing: dosing)
+        if check != .accepted {
+            strategy.recommendedUnits = nil
+            strategy.split = nil
+            strategy.differenceReason = nil
+        }
+        if case let .rejected(problem) = check {
+            strategy.cautions.append("Claude's amount was ignored because \(problem).")
+        }
     }
     if strategy.timing == nil, strategy.recommendedUnits == nil, strategy.watchFor.isEmpty, strategy.cautions.isEmpty {
         return MealStrategy(plainText: trimmed)
     }
     return strategy
+}
+
+/// How far above the app's calculation Claude may go: 20% or one pen step, whichever is larger.
+func strategyUpperBound(appUnits: Double, penStep: Double) -> Double {
+    appUnits + max(appUnits * 0.2, penStep)
+}
+
+enum StrategyAmountCheck: Equatable {
+    case accepted
+    /// No dose was calculated, or a different total came without a reason.
+    case droppedQuietly
+    case rejected(String)
+}
+
+func checkStrategyAmounts(_ strategy: MealStrategy, appUnits: Double?, dosing: DosingSettings) -> StrategyAmountCheck {
+    guard let appUnits else { return .droppedQuietly }
+    let amounts = [strategy.recommendedUnits].compactMap { $0 } + (strategy.split.map { [$0.nowUnits, $0.laterUnits] } ?? [])
+    let total = strategy.split.map { $0.nowUnits + $0.laterUnits } ?? strategy.recommendedUnits ?? 0
+    let highest = max(total, strategy.recommendedUnits ?? 0)
+    if amounts.contains(where: { $0 < 0 }) { return .rejected("it was negative") }
+    if highest > dosing.maxSingleDose + 1e-6 {
+        return .rejected("it was above your maximum single dose of \(formatUnits(dosing.maxSingleDose)) u")
+    }
+    if amounts.contains(where: { !isMultiple($0, of: dosing.penStep) }) {
+        return .rejected("it was not a multiple of the \(formatUnits(dosing.penStep)) u pen step")
+    }
+    if highest > strategyUpperBound(appUnits: appUnits, penStep: dosing.penStep) + 1e-6 {
+        return .rejected("it was too far above the app's calculation of \(formatUnits(appUnits)) u")
+    }
+    if strategy.differs(from: appUnits), strategy.differenceReason == nil { return .droppedQuietly }
+    return .accepted
+}
+
+private func isMultiple(_ value: Double, of step: Double) -> Bool {
+    guard step > 0 else { return true }
+    let ratio = value / step
+    return abs(ratio - ratio.rounded()) < 1e-6
 }
 
 private func string(_ value: Any?) -> String? {
@@ -273,6 +333,11 @@ private func double(_ value: Any?) -> Double? {
     if let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID() { return number.doubleValue }
     if let text = value as? String { return Double(text.trimmingCharacters(in: .whitespaces)) }
     return nil
+}
+
+private func hoursAgo(_ date: Date, now: Date) -> String {
+    let hours = max(0, now.timeIntervalSince(date)) / 3600
+    return hours < 1 ? "\(Int(hours * 60)) min" : String(format: "%.1f h", hours)
 }
 
 private func units(_ value: Double) -> String {
