@@ -132,6 +132,15 @@ import Testing
         #expect(decoded == expected)
     }
 
+    @Test func storedSettingsWithoutPredictionsGetDefaultsAndLeadsAreClamped() throws {
+        let json = #"{"isEnabled":true,"enabledLevels":["low"],"lowRepeatInterval":1200,"highRepeatInterval":3600,"predictedHighLead":99999}"#
+        let decoded = try JSONDecoder().decode(AlertSettings.self, from: Data(json.utf8))
+        #expect(decoded.predictsLow)
+        #expect(decoded.predictedLowLead == 30 * 60)
+        #expect(!decoded.predictsHigh)
+        #expect(decoded.predictedHighLead == AlertSettings.predictionLeadRange.upperBound)
+    }
+
     @Test func roundTripsThroughSettingsStore() {
         let suite = "sugarbar.test.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
@@ -143,5 +152,63 @@ import Testing
         settings.alerts.enabledLevels = [.urgentLow, .urgentHigh]
         store.save(settings)
         #expect(store.load().alerts == settings.alerts)
+    }
+}
+
+@Suite struct ForecastAlertTests {
+    private let now = Date(timeIntervalSince1970: 1_000_000)
+    private var settings: AlertSettings {
+        var settings = AlertSettings.default
+        settings.isEnabled = true
+        settings.predictsHigh = true
+        return settings
+    }
+
+    private func conditions(
+        value: Double,
+        lowIn: Double? = nil,
+        highIn: Double? = nil,
+        settings: AlertSettings? = nil,
+        alerting: Set<String> = []
+    ) -> [AlertCondition] {
+        let latest = Reading(value: value, timestamp: now.addingTimeInterval(-60), trend: .falling)
+        let forecast = Forecast(
+            points: [ForecastPoint(date: latest.timestamp, value: value)],
+            insulinOnBoard: 0,
+            carbsOnBoard: 0,
+            lowCrossing: lowIn.map { now.addingTimeInterval($0 * 60) },
+            highCrossing: highIn.map { now.addingTimeInterval($0 * 60) }
+        )
+        return forecastAlertConditions(
+            forecast: forecast, latest: latest, now: now, thresholds: .standard,
+            settings: settings ?? self.settings, alerting: alerting
+        )
+    }
+
+    @Test func warnsOnlyForCrossingsInsideTheirLeadTime() {
+        let low = conditions(value: 4.6, lowIn: 19)
+        #expect(low.map(\.family) == [ForecastAlertFamily.low])
+        #expect(low.first?.title == "Heading low: 4.6 ↘")
+        #expect(low.first?.body == "Predicted below 3.9 in about 20 min. Check, and consider carbs. Sugarbar is not a medical device.")
+        #expect(conditions(value: 4.6, lowIn: 45).isEmpty)
+        #expect(conditions(value: 9, highIn: 55).map(\.family) == [ForecastAlertFamily.high])
+        #expect(conditions(value: 9, highIn: 65).isEmpty)
+    }
+
+    @Test func quietWhenAlreadyPastTheThreshold() {
+        #expect(conditions(value: 3.6, lowIn: 10).isEmpty)
+        #expect(conditions(value: 11, highIn: 10).isEmpty)
+    }
+
+    @Test func predictedHighIsOffByDefault() {
+        var defaults = AlertSettings.default
+        defaults.isEnabled = true
+        #expect(conditions(value: 9, highIn: 10, settings: defaults).isEmpty)
+        #expect(conditions(value: 4.6, lowIn: 10, settings: .default).isEmpty)
+    }
+
+    @Test func staysOnPastTheLeadOnceWarned() {
+        #expect(conditions(value: 4.6, lowIn: 40, alerting: [ForecastAlertFamily.low]).count == 1)
+        #expect(conditions(value: 4.6, lowIn: 70, alerting: [ForecastAlertFamily.low]).isEmpty)
     }
 }

@@ -25,19 +25,32 @@ public struct AlertSettings: Equatable, Sendable, Codable {
     public var lowRepeatInterval: TimeInterval
     public var highRepeatInterval: TimeInterval
     public var snoozedUntil: Date?
+    public var predictsLow: Bool
+    /// How far ahead a Forecast crossing of the low threshold warns.
+    public var predictedLowLead: TimeInterval
+    public var predictsHigh: Bool
+    public var predictedHighLead: TimeInterval
 
     public init(
         isEnabled: Bool,
         enabledLevels: Set<AlertLevel>,
         lowRepeatInterval: TimeInterval,
         highRepeatInterval: TimeInterval,
-        snoozedUntil: Date? = nil
+        snoozedUntil: Date? = nil,
+        predictsLow: Bool = true,
+        predictedLowLead: TimeInterval = 30 * 60,
+        predictsHigh: Bool = false,
+        predictedHighLead: TimeInterval = 60 * 60
     ) {
         self.isEnabled = isEnabled
         self.enabledLevels = enabledLevels
         self.lowRepeatInterval = lowRepeatInterval
         self.highRepeatInterval = highRepeatInterval
         self.snoozedUntil = snoozedUntil
+        self.predictsLow = predictsLow
+        self.predictedLowLead = predictedLowLead
+        self.predictsHigh = predictsHigh
+        self.predictedHighLead = predictedHighLead
     }
 
     public static let `default` = AlertSettings(
@@ -48,6 +61,7 @@ public struct AlertSettings: Equatable, Sendable, Codable {
     )
 
     public static let repeatIntervalRange: ClosedRange<TimeInterval> = (5 * 60)...(4 * 60 * 60)
+    public static let predictionLeadRange: ClosedRange<TimeInterval> = (10 * 60)...(120 * 60)
 
     public func isSnoozed(at now: Date) -> Bool {
         guard let snoozedUntil else { return false }
@@ -56,6 +70,7 @@ public struct AlertSettings: Equatable, Sendable, Codable {
 
     private enum CodingKeys: String, CodingKey {
         case isEnabled, enabledLevels, lowRepeatInterval, highRepeatInterval, snoozedUntil
+        case predictsLow, predictedLowLead, predictsHigh, predictedHighLead
     }
 
     public init(from decoder: Decoder) throws {
@@ -66,10 +81,20 @@ public struct AlertSettings: Equatable, Sendable, Codable {
         lowRepeatInterval = Self.clamped(try container.decodeIfPresent(TimeInterval.self, forKey: .lowRepeatInterval) ?? fallback.lowRepeatInterval)
         highRepeatInterval = Self.clamped(try container.decodeIfPresent(TimeInterval.self, forKey: .highRepeatInterval) ?? fallback.highRepeatInterval)
         snoozedUntil = try container.decodeIfPresent(Date.self, forKey: .snoozedUntil)
+        predictsLow = try container.decodeIfPresent(Bool.self, forKey: .predictsLow) ?? fallback.predictsLow
+        predictedLowLead = Self.clamped(
+            try container.decodeIfPresent(TimeInterval.self, forKey: .predictedLowLead) ?? fallback.predictedLowLead,
+            to: Self.predictionLeadRange
+        )
+        predictsHigh = try container.decodeIfPresent(Bool.self, forKey: .predictsHigh) ?? fallback.predictsHigh
+        predictedHighLead = Self.clamped(
+            try container.decodeIfPresent(TimeInterval.self, forKey: .predictedHighLead) ?? fallback.predictedHighLead,
+            to: Self.predictionLeadRange
+        )
     }
 
-    private static func clamped(_ interval: TimeInterval) -> TimeInterval {
-        min(max(interval, repeatIntervalRange.lowerBound), repeatIntervalRange.upperBound)
+    private static func clamped(_ interval: TimeInterval, to range: ClosedRange<TimeInterval> = repeatIntervalRange) -> TimeInterval {
+        min(max(interval, range.lowerBound), range.upperBound)
     }
 }
 
@@ -234,6 +259,64 @@ public func glucoseAlertConditions(
         body: "\(valueText) mmol/L, Reading \(formatAge(latest.age(at: now))). Check with your sensor app or meter. Sugarbar is not a medical device.",
         isUrgent: level.isUrgent
     )]
+}
+
+public enum ForecastAlertFamily {
+    public static let low = "forecast.low"
+    public static let high = "forecast.high"
+}
+
+/// Early warnings when the Forecast crosses the low threshold within `predictedLowLead`
+/// or the high threshold within `predictedHighLead`. Quiet while the latest Reading is
+/// already past that threshold, since the glucose alert covers it. `alerting` holds the
+/// families already warned about: those stay on while the crossing is within twice the
+/// lead, so a crossing hovering at the edge of the window does not re-alert every poll.
+public func forecastAlertConditions(
+    forecast: Forecast?,
+    latest: Reading?,
+    now: Date,
+    thresholds: Thresholds,
+    settings: AlertSettings,
+    alerting: Set<String> = []
+) -> [AlertCondition] {
+    guard settings.isEnabled, let forecast, let latest else { return [] }
+    let band = Band(mmolPerL: latest.value, thresholds: thresholds)
+    let reading = [formatMmolPerL(latest.value), latest.trend.arrowText].compactMap { $0 }.joined(separator: " ")
+
+    func minutesUntil(_ crossing: Date?, family: String, lead: TimeInterval) -> Int? {
+        guard let crossing else { return nil }
+        let window = alerting.contains(family) ? lead * 2 : lead
+        let remaining = max(0, crossing.timeIntervalSince(now))
+        guard remaining <= window else { return nil }
+        return max(5, Int((remaining / 300).rounded()) * 5)
+    }
+
+    var conditions: [AlertCondition] = []
+    if settings.predictsLow, band != .low, band != .urgentLow,
+       let minutes = minutesUntil(forecast.lowCrossing, family: ForecastAlertFamily.low, lead: settings.predictedLowLead) {
+        conditions.append(AlertCondition(
+            family: ForecastAlertFamily.low,
+            rank: 0,
+            repeatInterval: settings.lowRepeatInterval,
+            title: "Heading low: \(reading)",
+            repeatTitle: "Still heading low: \(reading)",
+            body: "Predicted below \(formatMmolPerL(thresholds.low)) in about \(minutes) min. Check, and consider carbs. Sugarbar is not a medical device.",
+            isUrgent: false
+        ))
+    }
+    if settings.predictsHigh, band != .high, band != .urgentHigh,
+       let minutes = minutesUntil(forecast.highCrossing, family: ForecastAlertFamily.high, lead: settings.predictedHighLead) {
+        conditions.append(AlertCondition(
+            family: ForecastAlertFamily.high,
+            rank: 0,
+            repeatInterval: settings.highRepeatInterval,
+            title: "Heading high: \(reading)",
+            repeatTitle: "Still heading high: \(reading)",
+            body: "Predicted above \(formatMmolPerL(thresholds.high)) in about \(minutes) min. Check. Sugarbar is not a medical device.",
+            isUrgent: false
+        ))
+    }
+    return conditions
 }
 
 public protocol AlertStateStore: Sendable {

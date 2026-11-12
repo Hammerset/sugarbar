@@ -23,6 +23,10 @@ struct TrendsView: View {
                     valueDisplay
                         .frame(maxWidth: .infinity, alignment: .center)
 
+                    OnBoardSummary(forecast: model.forecast, therapyComplete: model.settings.therapy.isComplete)
+                        .font(.footnote)
+                        .frame(maxWidth: .infinity, alignment: .center)
+
                     if let stateLine {
                         Text(stateLine)
                             .font(.subheadline)
@@ -35,6 +39,7 @@ struct TrendsView: View {
                         series: series,
                         doses: model.chartDoses(window: window),
                         meals: model.chartMeals(window: window),
+                        forecast: model.chartForecast(window: window),
                         thresholds: thresholds,
                         latest: model.latest,
                         valueTint: model.content.tint,
@@ -69,7 +74,7 @@ struct TrendsView: View {
                     Button("Alerts", systemImage: "bell") { showAlerts = true }
                 }
             }
-            .sheet(isPresented: $showAlerts) {
+            .sheet(isPresented: $showAlerts, onDismiss: model.reloadSettings) {
                 AlertSettingsView()
             }
             .sheet(isPresented: $showGlookoSignIn) {
@@ -81,7 +86,7 @@ struct TrendsView: View {
             .sheet(isPresented: $showClaudeKey) {
                 ClaudeAPIKeyView(model: model)
             }
-            .sheet(isPresented: $showTherapySettings) {
+            .sheet(isPresented: $showTherapySettings, onDismiss: model.reloadSettings) {
                 TherapySettingsView()
             }
         }
