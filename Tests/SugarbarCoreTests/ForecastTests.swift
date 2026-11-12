@@ -79,10 +79,17 @@ import Testing
     }
 
     @Test func aDoseLowersGlucoseByUnitsTimesSensitivityOverItsDuration() throws {
-        let firstHalf = try #require(run(single(20), doses: [bolus(4, minutesAgo: 0)]))
-        let secondHalf = try #require(run(single(20), doses: [bolus(4, minutesAgo: 180)]))
-        let drop = (20 - firstHalf.eventual) + (20 - secondHalf.eventual)
-        #expect(abs(drop - 4 * 2.5) < 1e-9)
+        let result = try #require(run(single(20), doses: [bolus(4, minutesAgo: 0)]))
+        #expect(abs((20 - result.eventual) - 4 * 2.5) < 1e-9)
+    }
+
+    @Test func runsUntilTheLastEffectHasFinished() throws {
+        let dose = try #require(run(single(20), doses: [bolus(4, minutesAgo: 60)]))
+        #expect(dose.points.last?.date == now.addingTimeInterval(5 * 3600))
+        let meal = try #require(run(single(6), meals: [meal(20, minutesAgo: 0)], therapy: TherapySettings(insulinSensitivity: 2.5, carbRatio: 10, carbAbsorptionTime: 4 * 3600)))
+        #expect(meal.points.last?.date == now.addingTimeInterval(4 * 3600))
+        let finished = try #require(run(flat(6), doses: [bolus(4, minutesAgo: 5 * 60)]))
+        #expect(finished.points.last?.date == now.addingTimeInterval(forecastDisplayHorizon))
     }
 
     @Test func mealRaisesGlucoseByGramsTimesSensitivityOverRatio() throws {

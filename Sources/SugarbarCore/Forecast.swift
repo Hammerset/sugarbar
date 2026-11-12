@@ -41,7 +41,8 @@ public struct ForecastPoint: Equatable, Sendable {
 }
 
 public struct Forecast: Equatable, Sendable {
-    /// Every 5 minutes from the latest Reading (its value, unchanged) to 3 hours after it.
+    /// Every 5 minutes from the latest Reading (its value, unchanged) until every Dose and
+    /// Meal has finished acting, and at least `forecastDisplayHorizon` after the Reading.
     public let points: [ForecastPoint]
     /// Bolus units still to act at `now`.
     public let insulinOnBoard: Double
@@ -52,11 +53,13 @@ public struct Forecast: Equatable, Sendable {
     /// First point that rises above `Thresholds.high` from at or below it.
     public let highCrossing: Date?
 
+    /// Where glucose settles once every effect has finished.
     public var eventual: Double { points.last?.value ?? .nan }
 }
 
 public let forecastStep: TimeInterval = 5 * 60
-public let forecastHorizon: TimeInterval = 3 * 3600
+/// How far ahead a chart shows the Forecast; also the shortest Forecast produced.
+public let forecastDisplayHorizon: TimeInterval = 3 * 3600
 public let momentumWindow: TimeInterval = 15 * 60
 public let momentumBlendDuration: TimeInterval = 30 * 60
 
@@ -100,7 +103,10 @@ public func forecast(
     }
 
     let slope = momentumSlope(readings: readings, latest: latest)
-    let steps = Int(forecastHorizon / forecastStep)
+    let effectsEnd = boluses.map { $0.timestamp.addingTimeInterval(therapy.insulinDuration) }
+        + eaten.map { $0.timestamp.addingTimeInterval(therapy.carbAbsorptionTime) }
+    let horizon = max(forecastDisplayHorizon, (effectsEnd.max() ?? latest.timestamp).timeIntervalSince(latest.timestamp))
+    let steps = Int((horizon / forecastStep).rounded(.up))
     var points = [ForecastPoint(date: latest.timestamp, value: latest.value)]
     var value = latest.value
     var previousEffect = cumulativeEffect(at: latest.timestamp)

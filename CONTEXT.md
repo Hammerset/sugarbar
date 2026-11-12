@@ -69,7 +69,7 @@ The user's personal factors the Forecast needs: insulin sensitivity (mmol/L one 
 _Avoid_: profile, factors, ISF/ICR in UI text.
 
 **Forecast**:
-Where glucose is predicted to head over the next 3 hours, in 5-minute points from the latest Reading: the summed effect of Bolus insulin, Meal carbs and recent momentum. Carries the eventual value and the first predicted crossing of the low and high thresholds. Says where glucose is heading, never how much insulin to take.
+Where glucose is predicted to head, in 5-minute points from the latest Reading until every Dose and Meal has finished acting (at least 3 hours): the summed effect of Bolus insulin, Meal carbs and recent momentum. Carries the eventual (settled) value and the first predicted crossing of the low and high thresholds. Says where glucose is heading, never how much insulin to take.
 _Avoid_: prediction (fine in prose, not as a type), projection, dose advice.
 
 **Insulin on Board**:
