@@ -4,13 +4,15 @@ import SugarbarCore
 
 /// A platform-neutral history chart: readings against the reference range, with
 /// threshold lines, the latest point highlighted, insulin doses and meals marked
-/// along the floor, and drag-to-inspect selection.
+/// along the floor, an optional dashed Forecast past the latest Reading, and
+/// drag-to-inspect selection.
 public struct GlucoseHistoryChart: View {
     private let series: [Reading]
     private let segments: [[Reading]]
     private let envelope: [[GlucoseEnvelope]]
     private let doses: [InsulinDose]
     private let meals: [Meal]
+    private let forecast: [ForecastPoint]
     private let thresholds: Thresholds
     private let latest: Reading?
     private let valueTint: Color
@@ -22,6 +24,7 @@ public struct GlucoseHistoryChart: View {
         series: [Reading],
         doses: [InsulinDose] = [],
         meals: [Meal] = [],
+        forecast: [ForecastPoint] = [],
         thresholds: Thresholds,
         latest: Reading?,
         valueTint: Color,
@@ -40,6 +43,7 @@ public struct GlucoseHistoryChart: View {
         }
         self.doses = markerBucket.map { aggregateDoses(doses, bucket: $0) } ?? doses
         self.meals = markerBucket.map { aggregateMeals(meals, bucket: $0) } ?? meals
+        self.forecast = forecast
         self.thresholds = thresholds
         self.latest = latest
         self.valueTint = valueTint
@@ -114,6 +118,16 @@ public struct GlucoseHistoryChart: View {
                 }
             }
 
+            ForEach(forecast, id: \.date) { point in
+                LineMark(
+                    x: .value("Time", point.date),
+                    y: .value("mmol/L", point.value),
+                    series: .value("Segment", "forecast")
+                )
+                .lineStyle(StrokeStyle(lineWidth: 1.5, lineCap: .round, dash: [3, 4]))
+                .foregroundStyle(.secondary)
+            }
+
             if let latest {
                 PointMark(
                     x: .value("Time", latest.timestamp),
@@ -158,12 +172,14 @@ public struct GlucoseHistoryChart: View {
                 }
             }
 
-            if let selected = nearestReading(to: selectedDate, in: series) {
+            if let point = hoveredForecastPoint {
+                forecastSelectionMarks(for: point)
+            } else if let selected = nearestReading(to: selectedDate, in: series) {
                 selectionMarks(for: selected, doses: hoveredDoses, meals: hoveredMeals)
             }
         }
         .chartXSelection(value: $selectedDate)
-        .chartXScale(domain: xDomain)
+        .chartXScale(domain: displayDomain)
         .chartXAxis {
             AxisMarks(values: xAxis.values) { _ in
                 AxisGridLine()
@@ -186,21 +202,36 @@ public struct GlucoseHistoryChart: View {
         return SugarbarCore.meals(near: selectedDate, in: meals, tolerance: hoverTolerance)
     }
 
+    /// Past the latest Reading the hover reads the Forecast, never a measured value.
+    private var hoveredForecastPoint: ForecastPoint? {
+        guard let selectedDate, let start = forecast.first?.date,
+              selectedDate.timeIntervalSince(start) > forecastStep / 2
+        else { return nil }
+        return forecast.min { abs($0.date.timeIntervalSince(selectedDate)) < abs($1.date.timeIntervalSince(selectedDate)) }
+    }
+
+    private var displayDomain: ClosedRange<Date> {
+        guard let end = forecast.last?.date, end > xDomain.upperBound else { return xDomain }
+        return xDomain.lowerBound...end
+    }
+
     private var span: TimeInterval { xDomain.upperBound.timeIntervalSince(xDomain.lowerBound) }
+
+    private var displaySpan: TimeInterval { displayDomain.upperBound.timeIntervalSince(displayDomain.lowerBound) }
 
     private var isMultiDay: Bool { span > 86400 + 60 }
 
-    private var hoverTolerance: TimeInterval { span / 60 }
+    private var hoverTolerance: TimeInterval { displaySpan / 60 }
 
     private var showsMarkerLabels: Bool { markerBucket == nil }
 
     private var xAxis: (values: AxisMarkValues, format: Date.FormatStyle) {
-        let days = span / 86400
+        let days = displaySpan / 86400
         let dayMonth = Date.FormatStyle.dateTime.day().month(.abbreviated)
         switch days {
         case ...0.26: return (.stride(by: .hour), .dateTime.hour())
         case ...0.51: return (.stride(by: .hour, count: 2), .dateTime.hour())
-        case ...1.01: return (.stride(by: .hour, count: 4), .dateTime.hour())
+        case ...1.26: return (.stride(by: .hour, count: 4), .dateTime.hour())
         case ...7.01: return (.stride(by: .day), .dateTime.weekday(.abbreviated))
         case ...14.01: return (.stride(by: .day, count: 4), dayMonth)
         case ...30.01: return (.stride(by: .day, count: 7), dayMonth)
@@ -267,6 +298,35 @@ public struct GlucoseHistoryChart: View {
         .symbolSize(80)
     }
 
+    @ChartContentBuilder
+    private func forecastSelectionMarks(for point: ForecastPoint) -> some ChartContent {
+        RuleMark(x: .value("Time", point.date))
+            .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 2]))
+            .foregroundStyle(.secondary.opacity(0.5))
+            .annotation(position: .top, spacing: 4, overflowResolution: .init(x: .fit(to: .chart), y: .disabled)) {
+                Text("Forecast ≈ \(formatMmolPerL(point.value)) mmol/L")
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.secondary)
+            }
+            .annotation(position: .bottom, spacing: 4, overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))) {
+                Text(point.date, format: .dateTime.hour().minute())
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 1)
+                    .background(.background, in: RoundedRectangle(cornerRadius: 4))
+            }
+
+        PointMark(
+            x: .value("Time", point.date),
+            y: .value("mmol/L", point.value)
+        )
+        .symbol(Circle().strokeBorder(lineWidth: 1.5))
+        .foregroundStyle(.secondary)
+        .symbolSize(60)
+    }
+
     private var thresholdLines: [(value: Double, color: Color)] {
         [
             (thresholds.urgentLow, .red),
@@ -279,7 +339,7 @@ public struct GlucoseHistoryChart: View {
     /// Doses and meals sit in a strip below the glucose range so their markers never collide with
     /// the line. A bolus is usually logged at mealtime, so meals get their own row when both exist.
     private var yDomain: ClosedRange<Double> {
-        let values = series.map(\.value)
+        let values = series.map(\.value) + forecast.map(\.value)
         let low = min(values.min() ?? thresholds.urgentLow, thresholds.urgentLow) - 0.5
         let high = max(values.max() ?? thresholds.urgentHigh, thresholds.urgentHigh) + 0.5
         return max(0, low - stripHeight)...high

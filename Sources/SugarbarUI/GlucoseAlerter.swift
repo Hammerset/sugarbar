@@ -19,19 +19,29 @@ public final class GlucoseAlerter {
         self.allowsTimeSensitive = allowsTimeSensitive
     }
 
-    public func evaluate(latest: Reading?, sensorActivation: Date?, now: Date = Date()) async {
+    public func evaluate(latest: Reading?, sensorActivation: Date?, forecast: Forecast?, now: Date = Date()) async {
         // Read fresh: the other device or a background launch may have changed alert settings.
         let settings = settingsStore.load()
+        let state = stateStore.load()
         let conditions = glucoseAlertConditions(
             latest: latest,
             sensorActivation: sensorActivation,
             now: now,
             thresholds: settings.thresholds,
             settings: settings.alerts
-        )
+        ).map {
+            $0 + forecastAlertConditions(
+                forecast: forecast,
+                latest: latest,
+                now: now,
+                thresholds: settings.thresholds,
+                settings: settings.alerts,
+                alerting: Set(state.entries.keys)
+            )
+        }
         let decision = evaluateAlerts(
             conditions: conditions,
-            state: stateStore.load(),
+            state: state,
             now: now,
             snoozedUntil: settings.alerts.snoozedUntil
         )
@@ -56,7 +66,8 @@ public final class GlucoseAlerter {
         content.body = notification.body
         content.sound = .default
         content.threadIdentifier = notification.family
-        if allowsTimeSensitive, notification.isUrgent || notification.family == GlucoseAlertFamily.low {
+        let isLow = notification.family == GlucoseAlertFamily.low || notification.family == ForecastAlertFamily.low
+        if allowsTimeSensitive, notification.isUrgent || isLow {
             content.interruptionLevel = .timeSensitive
         }
         return UNNotificationRequest(identifier: notification.family, content: content, trigger: nil)

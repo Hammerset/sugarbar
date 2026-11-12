@@ -171,3 +171,32 @@ private func firstCrossing(_ points: [ForecastPoint], beyond: (Double) -> Bool) 
         .first { !beyond($0.0.value) && beyond($0.1.value) }?
         .1.date
 }
+
+public extension Forecast {
+    /// The stretch a chart draws: up to `forecastDisplayHorizon` after the latest Reading.
+    var displayPoints: [ForecastPoint] {
+        guard let start = points.first?.date else { return [] }
+        return points.filter { $0.date.timeIntervalSince(start) <= forecastDisplayHorizon }
+    }
+}
+
+/// The Forecast from History, looking back as far as any Dose or Meal can still act.
+public func forecastFromHistory(
+    _ history: HistoryStore,
+    meals: [Meal],
+    sensorActivation: Date?,
+    settings: Settings,
+    now: Date
+) -> Forecast? {
+    let therapy = settings.therapy
+    let since = now.addingTimeInterval(-max(therapy.insulinDuration, therapy.carbAbsorptionTime))
+    return forecast(
+        readings: history.readings(in: now.addingTimeInterval(-4 * momentumWindow)...now),
+        doses: history.doses(in: since...now),
+        meals: meals.filter { $0.timestamp >= since },
+        therapy: therapy,
+        thresholds: settings.thresholds,
+        sensorActivation: sensorActivation,
+        now: now
+    )
+}

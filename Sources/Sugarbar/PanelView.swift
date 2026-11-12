@@ -15,6 +15,8 @@ struct PanelView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             header
+            OnBoardSummary(forecast: model.forecast, therapyComplete: model.settings.therapy.isComplete)
+                .font(.caption)
             chart
             insulinLine
             if showsDoseEntry {
@@ -75,6 +77,7 @@ struct PanelView: View {
             series: series,
             doses: model.chartDoses(window: window),
             meals: model.chartMeals(window: window),
+            forecast: model.chartForecast(window: window),
             thresholds: thresholds,
             latest: model.latest,
             valueTint: valueTint,

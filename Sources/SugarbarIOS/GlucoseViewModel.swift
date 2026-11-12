@@ -17,8 +17,10 @@ final class GlucoseViewModel {
     private(set) var meals: [Meal] = []
     private(set) var hasClaudeAPIKey: Bool
     private(set) var healthKitError: String?
+    private(set) var forecast: Forecast?
+    private(set) var settings: Settings
 
-    private let settings: Settings
+    private let settingsStore: SettingsStore
     private let credentialStore: CredentialStore
     private let glookoCredentialStore: CredentialStore
     private let graphSnapshotStore: GraphSnapshotStore
@@ -52,6 +54,7 @@ final class GlucoseViewModel {
     ) {
         self.credentialStore = credentialStore
         self.glookoCredentialStore = glookoCredentialStore
+        self.settingsStore = settingsStore
         self.settings = settingsStore.load()
         self.graphSnapshotStore = graphSnapshotStore
         self.client = client
@@ -98,15 +101,27 @@ final class GlucoseViewModel {
         if let old { historyStore.replace(old, with: dose) } else { historyStore.append(doses: [dose]) }
         now = Date()
         historyRevision += 1
+        refreshForecast()
     }
 
     func deleteManualDose(_ dose: InsulinDose) {
         historyStore.delete(dose: dose)
         historyRevision += 1
+        refreshForecast()
     }
 
     func chartMeals(window: HistoryWindow) -> [Meal] {
         SugarbarCore.meals(meals, within: window, of: now)
+    }
+
+    func chartForecast(window: HistoryWindow) -> [ForecastPoint] {
+        window.isMultiDay ? [] : forecast?.displayPoints ?? []
+    }
+
+    /// The settings sheets write straight to the store, so pick their changes up when they close.
+    func reloadSettings() {
+        settings = settingsStore.load()
+        refreshForecast()
     }
 
     func start() {
@@ -138,6 +153,7 @@ final class GlucoseViewModel {
         try? credentialStore.clearToken()
         latest = nil
         sensorActivation = nil
+        forecast = nil
         statusMessage = nil
         isSignedIn = false
         graphSnapshotStore.save(GraphSnapshot(latest: nil, history: [], sensorActivation: nil))
@@ -177,6 +193,7 @@ final class GlucoseViewModel {
     func logMeal(_ meal: Meal) async {
         meals = (meals + [meal]).sorted { $0.timestamp < $1.timestamp }
         mealStore.save(meals)
+        refreshForecast()
         do {
             try await carbWriter.write(meal)
             healthKitError = nil
@@ -190,8 +207,10 @@ final class GlucoseViewModel {
     @discardableResult
     func pollOnce(includingInsulin: Bool = true) async -> PollOutcome {
         now = Date()
+        settings = settingsStore.load()
         let outcome = await pollGlucose()
-        await alerter.evaluate(latest: latest, sensorActivation: sensorActivation, now: now)
+        refreshForecast()
+        await alerter.evaluate(latest: latest, sensorActivation: sensorActivation, forecast: forecast, now: now)
         if includingInsulin { Task { await refreshDosesIfDue() } }
         return outcome
     }
@@ -246,5 +265,16 @@ final class GlucoseViewModel {
         }
         isSyncingGlooko = false
         historyRevision += 1
+        refreshForecast()
+    }
+
+    private func refreshForecast() {
+        forecast = forecastFromHistory(
+            historyStore,
+            meals: meals,
+            sensorActivation: sensorActivation,
+            settings: settings,
+            now: now
+        )
     }
 }

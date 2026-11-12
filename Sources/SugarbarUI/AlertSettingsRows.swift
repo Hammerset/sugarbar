@@ -38,6 +38,27 @@ public struct AlertSettingsRows: View {
                 in: minuteRange,
                 step: 5
             )
+            Toggle("Warn when heading low", isOn: $settings.predictsLow)
+            if settings.predictsLow {
+                Stepper(
+                    "Up to \(minutes(settings.predictedLowLead)) min ahead",
+                    value: minutesBinding(\.predictedLowLead),
+                    in: leadRange,
+                    step: 5
+                )
+            }
+            Toggle("Warn when heading high", isOn: $settings.predictsHigh)
+            if settings.predictsHigh {
+                Stepper(
+                    "Up to \(minutes(settings.predictedHighLead)) min ahead",
+                    value: minutesBinding(\.predictedHighLead),
+                    in: leadRange,
+                    step: 5
+                )
+            }
+            Text("Early warnings use the Forecast, so they need Therapy Settings.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
             TimelineView(.periodic(from: .now, by: 60)) { context in
                 if let until = settings.snoozedUntil, until > context.date {
                     LabeledContent("Snoozed until", value: until.formatted(date: .omitted, time: .shortened))
@@ -51,6 +72,10 @@ public struct AlertSettingsRows: View {
 
     private var minuteRange: ClosedRange<Int> {
         minutes(AlertSettings.repeatIntervalRange.lowerBound)...minutes(AlertSettings.repeatIntervalRange.upperBound)
+    }
+
+    private var leadRange: ClosedRange<Int> {
+        minutes(AlertSettings.predictionLeadRange.lowerBound)...minutes(AlertSettings.predictionLeadRange.upperBound)
     }
 
     private func minutes(_ interval: TimeInterval) -> Int {
