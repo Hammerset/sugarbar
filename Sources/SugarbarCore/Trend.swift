@@ -17,6 +17,17 @@ public enum Trend: Equatable, Sendable, Codable {
         }
     }
 
+    public var apiValue: Int {
+        switch self {
+        case .notDetermined: 0
+        case .fallingQuickly: 1
+        case .falling: 2
+        case .stable: 3
+        case .rising: 4
+        case .risingQuickly: 5
+        }
+    }
+
     public var symbolName: String? {
         switch self {
         case .notDetermined: nil

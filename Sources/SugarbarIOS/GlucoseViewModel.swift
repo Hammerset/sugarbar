@@ -7,13 +7,11 @@ import WidgetKit
 @Observable
 final class GlucoseViewModel {
     private(set) var latest: Reading?
-    private(set) var history: [Reading] = []
     private(set) var sensorActivation: Date?
     private(set) var statusMessage: String?
     private(set) var now = Date()
     private(set) var isSignedIn: Bool
     private(set) var isGlookoSignedIn: Bool
-    private(set) var doses: [InsulinDose] = []
     private(set) var insulinSyncError: String?
     private(set) var meals: [Meal] = []
     private(set) var hasClaudeAPIKey: Bool
@@ -26,12 +24,15 @@ final class GlucoseViewModel {
     private let client: LibreLinkUpClient
     private let glookoClient: GlookoClient
     private let mealStore: MealStore
+    private let historyStore: HistoryStore
     private let claudeKeyStore: CredentialStore
     private let mealAnalyzer: MealAnalyzer
     private let carbWriter: HealthKitCarbWriter
     private let reloadWidgets: () -> Void
     private var engine: PollingEngine?
     private var lastDoseFetch: Date?
+    private var isSyncingGlooko = false
+    private var historyRevision = 0
 
     init(
         credentialStore: CredentialStore = KeychainStore(),
@@ -41,6 +42,7 @@ final class GlucoseViewModel {
         client: LibreLinkUpClient = LibreLinkUpClient(transport: URLSessionTransport()),
         glookoClient: GlookoClient = GlookoClient(transport: URLSessionTransport()),
         mealStore: MealStore = UserDefaultsMealStore(),
+        historyStore: HistoryStore = FileHistoryStore(),
         claudeKeyStore: CredentialStore = KeychainStore(servicePrefix: anthropicKeychainServicePrefix),
         mealAnalyzer: MealAnalyzer = MealAnalyzer(transport: URLSessionTransport()),
         carbWriter: HealthKitCarbWriter = HealthKitCarbWriter(),
@@ -53,6 +55,7 @@ final class GlucoseViewModel {
         self.client = client
         self.glookoClient = glookoClient
         self.mealStore = mealStore
+        self.historyStore = historyStore
         self.claudeKeyStore = claudeKeyStore
         self.mealAnalyzer = mealAnalyzer
         self.carbWriter = carbWriter
@@ -70,14 +73,13 @@ final class GlucoseViewModel {
     }
 
     func chartSeries(window: HistoryWindow) -> [Reading] {
-        guard let latest else {
-            return readings(history, within: window, of: now)
-        }
-        return readings(mergeReadings(history: history, latest: latest), within: window, of: now)
+        _ = historyRevision
+        return historyStore.readings(in: window.interval(endingAt: now))
     }
 
     func chartDoses(window: HistoryWindow) -> [InsulinDose] {
-        insulinDoses(doses, within: window, of: now)
+        _ = historyRevision
+        return historyStore.doses(in: window.interval(endingAt: now))
     }
 
     func chartMeals(window: HistoryWindow) -> [Meal] {
@@ -112,7 +114,6 @@ final class GlucoseViewModel {
         try? credentialStore.clearCredentials()
         try? credentialStore.clearToken()
         latest = nil
-        history = []
         sensorActivation = nil
         statusMessage = nil
         isSignedIn = false
@@ -131,7 +132,6 @@ final class GlucoseViewModel {
     func signOutGlooko() {
         try? glookoCredentialStore.clearCredentials()
         isGlookoSignedIn = false
-        doses = []
         insulinSyncError = nil
         lastDoseFetch = nil
     }
@@ -168,7 +168,7 @@ final class GlucoseViewModel {
     func pollOnce(includingInsulin: Bool = true) async -> PollOutcome {
         now = Date()
         let outcome = await pollGlucose()
-        if includingInsulin { await refreshDosesIfDue() }
+        if includingInsulin { Task { await refreshDosesIfDue() } }
         return outcome
     }
 
@@ -184,7 +184,8 @@ final class GlucoseViewModel {
                 preferredPatientId: settings.selectedPatientId
             )
             latest = snapshot.latest
-            history = snapshot.history
+            historyStore.append(readings: [snapshot.latest].compactMap(\.self) + snapshot.history)
+            historyRevision += 1
             sensorActivation = snapshot.sensorActivation
             statusMessage = nil
             graphSnapshotStore.save(snapshot)
@@ -209,20 +210,17 @@ final class GlucoseViewModel {
     }
 
     private func refreshDoses() async {
-        guard let credentials = try? glookoCredentialStore.loadCredentials() else { return }
-        let fetchedAt = Date()
+        guard let credentials = try? glookoCredentialStore.loadCredentials(), !isSyncingGlooko else { return }
+        isSyncingGlooko = true
+        lastDoseFetch = Date()
         do {
-            doses = try await glookoClient.fetchDoses(
-                email: credentials.email,
-                password: credentials.password,
-                from: fetchedAt.addingTimeInterval(-doseLookback),
-                to: fetchedAt.addingTimeInterval(60)
-            )
+            try await syncGlookoHistory(client: glookoClient, store: historyStore, credentials: credentials)
             insulinSyncError = nil
         } catch {
             logDiagnostic("glooko", error)
             insulinSyncError = error.sugarbarMessage
         }
-        lastDoseFetch = fetchedAt
+        isSyncingGlooko = false
+        historyRevision += 1
     }
 }

@@ -14,9 +14,9 @@ public actor GlookoClient {
         self.timeZone = timeZone
     }
 
-    public func fetchDoses(email: String, password: String, from start: Date, to end: Date) async throws -> [InsulinDose] {
+    public func fetchHistory(email: String, password: String, from start: Date, to end: Date) async throws -> GlookoHistory {
         try await withSession(email: email, password: password) { session in
-            try await self.fetchDoses(session, from: start, to: end)
+            try await self.fetchHistory(session, from: start, to: end)
         }
     }
 
@@ -78,7 +78,7 @@ public actor GlookoClient {
         )
     }
 
-    private func fetchDoses(_ session: Session, from start: Date, to end: Date) async throws -> [InsulinDose] {
+    private func fetchHistory(_ session: Session, from start: Date, to end: Date) async throws -> GlookoHistory {
         var components = URLComponents(url: session.apiBase.appending(path: "api/v3/graph/data"), resolvingAgainstBaseURL: false)!
         components.queryItems = [
             URLQueryItem(name: "patient", value: session.patientId),
@@ -88,9 +88,7 @@ public actor GlookoClient {
             URLQueryItem(name: "insulinTooltips", value: "true"),
             URLQueryItem(name: "filterBgReadings", value: "true"),
             URLQueryItem(name: "splitByDay", value: "false"),
-            URLQueryItem(name: "series[]", value: "gkInsulinBolus"),
-            URLQueryItem(name: "series[]", value: "gkInsulinBasal"),
-        ]
+        ] + (glookoInsulinSeries + glookoCGMSeries).map { URLQueryItem(name: "series[]", value: $0) }
         var request = URLRequest(url: components.url!)
         request.setValue("application/json, text/plain, */*", forHTTPHeaderField: "Accept")
         request.setValue("XMLHttpRequest", forHTTPHeaderField: "X-Requested-With")
@@ -100,7 +98,7 @@ public actor GlookoClient {
         let response = try await send(request)
         // An expired cookie session bounces the JSON call to the HTML sign-in page with a 200.
         if response.body.first == UInt8(ascii: "<") { throw GlookoError.sessionExpired }
-        return try decodeGlookoDoses(response.body, timeZone: timeZone)
+        return try decodeGlookoHistory(response.body, timeZone: timeZone)
     }
 
     private func send(_ request: URLRequest) async throws -> HTTPResponse {

@@ -22,7 +22,15 @@ private let dosesJSON = """
     "gkInsulinBasal": [
       { "name": "Tresiba", "units": "units", "timestamp": "2026-10-12T08:35:00.000Z", "x": 1791794100,
         "y": 9.0, "delivered": false, "value": 9.0, "group": "gkInsulin", "deviceName": null }
-    ]
+    ],
+    "cgmNormal": [
+      { "timestamp": "2026-10-12T17:09:47.000Z", "x": 1791824987, "y": 8.0, "value": 14400, "calculated": false, "mealTag": "none" },
+      { "timestamp": "2026-10-12T17:14:47.000Z", "x": 1791825287, "y": 8.2, "value": 14800, "calculated": true, "mealTag": "none" }
+    ],
+    "cgmHigh": [
+      { "timestamp": "2026-10-12T17:04:47.000Z", "x": 1791824687, "y": 27.8, "value": 200100, "calculated": false, "mealTag": "none" }
+    ],
+    "cgmLow": []
   },
   "devices": ["NOVO_NOVOPEN"]
 }
@@ -32,7 +40,7 @@ private let oslo = TimeZone(identifier: "Europe/Oslo")!
 
 @Suite struct GlookoDecodingTests {
     @Test func decodesPenBolusAndManualBasalAsWallClockTime() throws {
-        let doses = try decodeGlookoDoses(Data(dosesJSON.utf8), timeZone: oslo)
+        let doses = try decodeGlookoHistory(Data(dosesJSON.utf8), timeZone: oslo).doses
 
         #expect(doses.count == 2)
         #expect(doses[0].kind == .basal)
@@ -49,8 +57,20 @@ private let oslo = TimeZone(identifier: "Europe/Oslo")!
         #expect(doses[1].timestamp == Date(timeIntervalSince1970: 1_791_825_242 - 7200))
     }
 
+    @Test func decodesCGMReadingsFromHundredthsOfMgPerDlWithoutTrend() throws {
+        let readings = try decodeGlookoHistory(Data(dosesJSON.utf8), timeZone: oslo).readings
+
+        // The interpolated ("calculated") point is dropped; 200100 is Glooko's HI sentinel.
+        #expect(readings.count == 2)
+        #expect(readings[0].outOfRange == .high)
+        #expect(readings[0].timestamp == Date(timeIntervalSince1970: 1_791_824_687 - 7200))
+        #expect(abs(readings[1].value - mmolPerL(fromMgPerDl: 144)) < 0.0001)
+        #expect(readings.allSatisfy { $0.trend == .notDetermined })
+    }
+
     @Test func toleratesMissingSeries() throws {
-        #expect(try decodeGlookoDoses(Data(#"{ "series": {} }"#.utf8)).isEmpty)
+        let history = try decodeGlookoHistory(Data(#"{ "series": {} }"#.utf8))
+        #expect(history.doses.isEmpty && history.readings.isEmpty)
     }
 
     @Test func parsesDashboardBootstrap() {
@@ -80,11 +100,11 @@ private let oslo = TimeZone(identifier: "Europe/Oslo")!
         await stubHappyPath(transport)
 
         let client = GlookoClient(transport: transport, timeZone: oslo)
-        let doses = try await client.fetchDoses(
+        let history = try await client.fetchHistory(
             email: "a@b.no", password: "p w",
             from: Date(timeIntervalSince1970: 1_791_700_000), to: Date(timeIntervalSince1970: 1_791_800_000)
         )
-        #expect(doses.count == 2)
+        #expect(history.doses.count == 2)
 
         let login = try #require(await transport.lastRequest(host: "my.glooko.com", path: "/users/sign_in"))
         #expect(login.httpMethod == "POST")
@@ -99,9 +119,29 @@ private let oslo = TimeZone(identifier: "Europe/Oslo")!
         #expect(query.contains(URLQueryItem(name: "patient", value: "eu-west-1-patient-42")))
         // Query bounds are sent as Oslo wall-clock time with a literal Z, matching Glooko's convention.
         #expect(query.contains(URLQueryItem(name: "startDate", value: "2026-10-11T08:26:40.000Z")))
-        #expect(query.filter { $0.name == "series[]" }.map(\.value) == ["gkInsulinBolus", "gkInsulinBasal"])
+        #expect(query.filter { $0.name == "series[]" }.map(\.value) == ["gkInsulinBolus", "gkInsulinBasal", "cgmLow", "cgmNormal", "cgmHigh"])
         #expect(graph.value(forHTTPHeaderField: "Origin") == "https://eu.my.glooko.com")
         #expect(graph.value(forHTTPHeaderField: "X-Requested-With") == "XMLHttpRequest")
+    }
+
+    @Test func syncBackfillsIntoTheStoreAndParksTheCursorAtTheNewestReading() async throws {
+        let transport = FakeTransport()
+        await stubHappyPath(transport)
+        let store = InMemoryHistoryStore()
+        let now = Date(timeIntervalSince1970: 1_791_830_000)
+
+        try await syncGlookoHistory(
+            client: GlookoClient(transport: transport, timeZone: oslo),
+            store: store,
+            credentials: Credentials(email: "a@b.no", password: "pw"),
+            now: now
+        )
+
+        #expect(await transport.requestCount(host: "eu.api.glooko.com", path: "/api/v3/graph/data") == 13)
+        let everything = now.addingTimeInterval(-glookoBackfillSpan)...now
+        #expect(store.readings(in: everything).count == 2)
+        #expect(store.doses(in: everything).count == 2)
+        #expect(store.glookoCursor() == Date(timeIntervalSince1970: 1_791_824_987 - 7200))
     }
 
     @Test func rejectedSignInIsAuthenticationFailure() async throws {
@@ -110,7 +150,7 @@ private let oslo = TimeZone(identifier: "Europe/Oslo")!
 
         let client = GlookoClient(transport: transport)
         await #expect(throws: GlookoError.authenticationFailed) {
-            try await client.fetchDoses(email: "a@b.no", password: "bad", from: .distantPast, to: .distantFuture)
+            try await client.fetchHistory(email: "a@b.no", password: "bad", from: .distantPast, to: .distantFuture)
         }
     }
 
@@ -126,10 +166,10 @@ private let oslo = TimeZone(identifier: "Europe/Oslo")!
         await transport.stub(host: "eu.api.glooko.com", path: "/api/v3/graph/data", json: dosesJSON)
 
         let client = GlookoClient(transport: transport)
-        _ = try await client.fetchDoses(email: "a@b.no", password: "pw", from: .distantPast, to: .distantFuture)
-        let doses = try await client.fetchDoses(email: "a@b.no", password: "pw", from: .distantPast, to: .distantFuture)
+        _ = try await client.fetchHistory(email: "a@b.no", password: "pw", from: .distantPast, to: .distantFuture)
+        let history = try await client.fetchHistory(email: "a@b.no", password: "pw", from: .distantPast, to: .distantFuture)
 
-        #expect(doses.count == 2)
+        #expect(history.doses.count == 2)
         #expect(await transport.requestCount(host: "my.glooko.com", path: "/users/sign_in") == 4)
         #expect(await transport.requestCount(host: "eu.api.glooko.com", path: "/api/v3/graph/data") == 3)
     }
@@ -145,27 +185,25 @@ private let oslo = TimeZone(identifier: "Europe/Oslo")!
         await transport.stub(host: "eu.api.glooko.com", path: "/api/v3/graph/data", json: dosesJSON)
 
         let client = GlookoClient(transport: transport)
-        _ = try await client.fetchDoses(email: "a@b.no", password: "pw", from: .distantPast, to: .distantFuture)
+        _ = try await client.fetchHistory(email: "a@b.no", password: "pw", from: .distantPast, to: .distantFuture)
         #expect(await transport.requestCount(host: "my.glooko.com", path: "/users/sign_in") == 2)
 
-        let doses = try await client.fetchDoses(email: "a@b.no", password: "pw", from: .distantPast, to: .distantFuture)
-        #expect(doses.count == 2)
+        let history = try await client.fetchHistory(email: "a@b.no", password: "pw", from: .distantPast, to: .distantFuture)
+        #expect(history.doses.count == 2)
         #expect(await transport.requestCount(host: "my.glooko.com", path: "/users/sign_in") == 4)
         #expect(await transport.requestCount(host: "eu.api.glooko.com", path: "/api/v3/graph/data") == 3)
     }
 }
 
 @Suite struct InsulinDoseTests {
-    @Test func windowsAndTotalsDoses() {
+    @Test func totalsAndFindsNearbyDoses() {
         let now = Date(timeIntervalSince1970: 1_791_800_000)
         let doses = [
             InsulinDose(kind: .basal, units: 10, timestamp: now.addingTimeInterval(-5 * 3600), insulinName: nil, deviceName: nil),
             InsulinDose(kind: .bolus, units: 4, timestamp: now.addingTimeInterval(-3 * 3600), insulinName: nil, deviceName: "pen"),
             InsulinDose(kind: .bolus, units: 1.5, timestamp: now.addingTimeInterval(-600), insulinName: nil, deviceName: "pen"),
         ]
-        let recent = insulinDoses(doses, within: .fourHours, of: now)
-        #expect(recent.map(\.units) == [4, 1.5])
-        #expect(insulinTotals(recent) == InsulinTotals(bolus: 5.5, basal: 0))
+        #expect(insulinTotals(doses) == InsulinTotals(bolus: 5.5, basal: 10))
         #expect(insulinDoses(near: now.addingTimeInterval(-500), in: doses, tolerance: 300).map(\.units) == [1.5])
         #expect(insulinDoses(near: now.addingTimeInterval(-1000), in: doses, tolerance: 300).isEmpty)
         #expect(formatUnits(1.5) == "1.5")

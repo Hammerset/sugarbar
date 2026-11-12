@@ -16,7 +16,7 @@ public struct Meal: Equatable, Sendable, Codable, Identifiable {
 }
 
 public func meals(_ meals: [Meal], within window: HistoryWindow, of now: Date) -> [Meal] {
-    let cutoff = now.addingTimeInterval(-Double(window.hours) * 3600)
+    let cutoff = now.addingTimeInterval(-window.duration)
     return meals.filter { $0.timestamp >= cutoff && $0.timestamp <= now }
 }
 
