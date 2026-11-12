@@ -5,6 +5,7 @@ import SugarbarUI
 struct PanelView: View {
     let model: BarViewModel
     var onOpenSettings: () -> Void = {}
+    var onAskClaude: () -> Void = {}
     @State private var window: HistoryWindow = .fourHours
     @State private var selectedDate: Date?
     @State private var showsDoseEntry = false
@@ -125,6 +126,8 @@ struct PanelView: View {
                 .help("Settings")
                 .accessibilityLabel("Settings")
                 Button("Log Dose", systemImage: "syringe") { showsDoseEntry.toggle() }
+                    .buttonStyle(.borderless)
+                Button("Ask Claude", systemImage: "bubble.left.and.text.bubble.right", action: onAskClaude)
                     .buttonStyle(.borderless)
                 Spacer()
                 Button("Quit") { NSApplication.shared.terminate(nil) }

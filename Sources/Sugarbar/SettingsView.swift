@@ -46,6 +46,7 @@ struct SettingsView: View {
             accountSection
             sensorSection
             glookoSection
+            ClaudeAPIKeySection(model: model)
             referenceRangeSection
             TherapySettingsSection(model: model)
             pollingSection

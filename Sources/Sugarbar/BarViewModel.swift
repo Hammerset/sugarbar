@@ -14,6 +14,7 @@ final class BarViewModel {
     private(set) var availableConnections: [Connection] = []
     private(set) var insulinSyncError: String?
     private(set) var meals: [Meal] = []
+    private(set) var hasClaudeAPIKey = false
     private(set) var forecast: Forecast?
 
     private let credentialStore: CredentialStore
@@ -24,6 +25,7 @@ final class BarViewModel {
     private let historyStore: HistoryStore
     private let makeClient: () -> LibreLinkUpClient
     private let glookoClient: GlookoClient
+    private let claudeKeyStore: CredentialStore
     private let alerter = GlucoseAlerter(allowsTimeSensitive: false)
     private var engine: PollingEngine?
     private var lastDoseFetch: Date?
@@ -38,7 +40,8 @@ final class BarViewModel {
         mealStore: MealStore = UserDefaultsMealStore(),
         historyStore: HistoryStore = FileHistoryStore(),
         makeClient: @escaping () -> LibreLinkUpClient = { LibreLinkUpClient(transport: URLSessionTransport()) },
-        glookoClient: GlookoClient = GlookoClient(transport: URLSessionTransport())
+        glookoClient: GlookoClient = GlookoClient(transport: URLSessionTransport()),
+        claudeKeyStore: CredentialStore = KeychainStore(servicePrefix: anthropicKeychainServicePrefix)
     ) {
         self.credentialStore = credentialStore
         self.glookoCredentialStore = glookoCredentialStore
@@ -49,6 +52,8 @@ final class BarViewModel {
         self.makeClient = makeClient
         self.glookoClient = glookoClient
         self.settings = settingsStore.load()
+        self.claudeKeyStore = claudeKeyStore
+        self.hasClaudeAPIKey = Self.resolveClaudeAPIKey(claudeKeyStore) != nil
     }
 
     var thresholds: Thresholds { settings.thresholds }
@@ -177,6 +182,27 @@ final class BarViewModel {
         lastDoseFetch = nil
     }
 
+    func saveClaudeAPIKey(_ key: String) {
+        try? claudeKeyStore.saveToken(key)
+        hasClaudeAPIKey = true
+    }
+
+    func clearClaudeAPIKey() {
+        try? claudeKeyStore.clearToken()
+        hasClaudeAPIKey = Self.resolveClaudeAPIKey(claudeKeyStore) != nil
+    }
+
+    func makeAskClaudeModel() -> AskClaudeModel {
+        AskClaudeModel(
+            makeContext: { [weak self] in
+                guard let self else { return "" }
+                return historySummary(history: historyStore, meals: mealStore.load(), settings: settingsStore.load(), forecast: forecast)
+            },
+            hasAPIKey: { [weak self] in self?.hasClaudeAPIKey ?? false },
+            apiKey: { [claudeKeyStore] in Self.resolveClaudeAPIKey(claudeKeyStore) }
+        )
+    }
+
     func loadConnections() async throws -> [Connection] {
         guard let credentials = resolveCredentials() else {
             throw LibreLinkUpError.authenticationFailed
@@ -276,6 +302,10 @@ final class BarViewModel {
 
     private func resolveCredentials() -> Credentials? {
         Credentials.fromEnvironment() ?? (try? credentialStore.loadCredentials())
+    }
+
+    private static func resolveClaudeAPIKey(_ store: CredentialStore) -> String? {
+        anthropicAPIKey() ?? (try? store.loadToken())
     }
 
     private func resolveGlookoCredentials() -> Credentials? {
