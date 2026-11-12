@@ -17,6 +17,7 @@ public func historySummary(
     meals: [Meal],
     thresholds: Thresholds,
     therapy: TherapySettings,
+    forecast: Forecast? = nil,
     now: Date,
     days: Int = defaultSummaryDays,
     timeZone: TimeZone = .current
@@ -28,6 +29,7 @@ public func historySummary(
         meals: meals.filter { span.contains($0.timestamp) }.sorted { $0.timestamp < $1.timestamp },
         thresholds: thresholds,
         therapy: therapy,
+        forecast: forecast,
         now: now,
         span: span,
         days: max(days, 1),
@@ -36,7 +38,7 @@ public func historySummary(
     return summary.build()
 }
 
-public func historySummary(history: HistoryStore, meals: [Meal], settings: Settings, now: Date = Date(), days: Int = defaultSummaryDays) -> String {
+public func historySummary(history: HistoryStore, meals: [Meal], settings: Settings, forecast: Forecast? = nil, now: Date = Date(), days: Int = defaultSummaryDays) -> String {
     let span = historySummaryInterval(now: now, days: days)
     return historySummary(
         readings: history.readings(in: span),
@@ -44,6 +46,7 @@ public func historySummary(history: HistoryStore, meals: [Meal], settings: Setti
         meals: meals,
         thresholds: settings.thresholds,
         therapy: settings.therapy,
+        forecast: forecast,
         now: now,
         days: days
     )
@@ -83,6 +86,7 @@ private struct SummaryBuilder {
     let meals: [Meal]
     let thresholds: Thresholds
     let therapy: TherapySettings
+    let forecast: Forecast?
     let now: Date
     let span: ClosedRange<Date>
     let days: Int
@@ -110,6 +114,9 @@ private struct SummaryBuilder {
         } else {
             lines.append("No Readings in this span.")
         }
+        if let forecast {
+            lines.append(forecastLine(forecast))
+        }
         return lines.joined(separator: "\n")
     }
 
@@ -120,6 +127,14 @@ private struct SummaryBuilder {
         parts.append("insulin duration \(number(therapy.insulinDuration / 3600)) h, peak \(Int(therapy.insulinPeak / 60)) min")
         parts.append("carb absorption \(number(therapy.carbAbsorptionTime / 3600)) h")
         return parts.joined(separator: "; ")
+    }
+
+    private func forecastLine(_ forecast: Forecast) -> String {
+        var line = "App Forecast now (Loop-style model from Bolus Doses, logged Meals and recent trend; informational): Insulin on Board \(formatUnits((forecast.insulinOnBoard * 10).rounded() / 10)) u, Carbs on Board \(formatGrams(forecast.carbsOnBoard)) g"
+        if forecast.eventual.isFinite { line += ", settling around \(mmol(forecast.eventual))" }
+        if let low = forecast.lowCrossing { line += ", predicted below \(mmol(thresholds.low)) at \(format(low, "HH:mm"))" }
+        if let high = forecast.highCrossing { line += ", predicted above \(mmol(thresholds.high)) at \(format(high, "HH:mm"))" }
+        return line + "."
     }
 
     private func lastDay() -> String {

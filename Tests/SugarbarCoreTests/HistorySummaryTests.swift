@@ -114,6 +114,18 @@ func syntheticHistory(days: Int, now: Date) -> (readings: [Reading], doses: [Ins
         #expect(text.contains("no Readings; lows 0; bolus 0 u, basal 0 u; carbs 0 g"))
     }
 
+    @Test func includesTheCurrentForecast() {
+        let forecast = Forecast(
+            points: [ForecastPoint(date: now, value: 10.9), ForecastPoint(date: now.addingTimeInterval(3 * 3600), value: 6.4)],
+            insulinOnBoard: 2.345,
+            carbsOnBoard: 18.4,
+            lowCrossing: nil,
+            highCrossing: now.addingTimeInterval(600)
+        )
+        let text = historySummary(readings: [], doses: [], meals: [], thresholds: .standard, therapy: .default, forecast: forecast, now: now, days: 1, timeZone: oslo)
+        #expect(text.contains("Insulin on Board 2.3 u, Carbs on Board 18 g, settling around 6.4, predicted above 10.0 at 14:17."))
+    }
+
     @Test func lowEpisodesMergeShortGaps() {
         let base = Date(timeIntervalSince1970: 0)
         func reading(_ minutes: Double, _ value: Double) -> Reading {

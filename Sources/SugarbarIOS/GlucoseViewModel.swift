@@ -193,8 +193,8 @@ final class GlucoseViewModel {
     /// Therapy Settings are edited straight into the shared store, so read it fresh.
     func makeAskClaudeModel(settingsStore: SettingsStore = UserDefaultsSettingsStore()) -> AskClaudeModel {
         AskClaudeModel(
-            makeContext: { [historyStore, mealStore] in
-                historySummary(history: historyStore, meals: mealStore.load(), settings: settingsStore.load())
+            makeContext: { [weak self, historyStore, mealStore] in
+                historySummary(history: historyStore, meals: mealStore.load(), settings: settingsStore.load(), forecast: self?.forecast)
             },
             hasAPIKey: { [weak self] in self?.hasClaudeAPIKey ?? false },
             apiKey: { [claudeKeyStore] in Self.resolveClaudeAPIKey(claudeKeyStore) }
