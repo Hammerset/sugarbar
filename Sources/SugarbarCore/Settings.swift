@@ -7,6 +7,7 @@ public struct Settings: Equatable, Sendable {
     public var disclaimerAcknowledged: Bool
     public var alerts: AlertSettings
     public var therapy: TherapySettings
+    public var therapyLearning: TherapyLearning
 
     public init(
         thresholds: Thresholds,
@@ -14,7 +15,8 @@ public struct Settings: Equatable, Sendable {
         selectedPatientId: String?,
         disclaimerAcknowledged: Bool,
         alerts: AlertSettings = .default,
-        therapy: TherapySettings = .default
+        therapy: TherapySettings = .default,
+        therapyLearning: TherapyLearning = .default
     ) {
         self.thresholds = thresholds
         self.pollCadence = pollCadence
@@ -22,6 +24,7 @@ public struct Settings: Equatable, Sendable {
         self.disclaimerAcknowledged = disclaimerAcknowledged
         self.alerts = alerts
         self.therapy = therapy
+        self.therapyLearning = therapyLearning
     }
 
     public static let cadenceRange: ClosedRange<TimeInterval> = 30...300
@@ -52,6 +55,7 @@ public final class UserDefaultsSettingsStore: SettingsStore, @unchecked Sendable
         static let selectedPatientId = "connection.patientId"
         static let disclaimerAcknowledged = "disclaimer.acknowledged"
         static let alerts = "alerts.settings"
+        static let therapyLearning = "therapy.learning"
     }
 
     private let defaults: UserDefaults
@@ -67,7 +71,8 @@ public final class UserDefaultsSettingsStore: SettingsStore, @unchecked Sendable
             selectedPatientId: defaults.string(forKey: Key.selectedPatientId),
             disclaimerAcknowledged: defaults.bool(forKey: Key.disclaimerAcknowledged),
             alerts: loadAlerts(),
-            therapy: TherapySettings.load(from: defaults)
+            therapy: TherapySettings.load(from: defaults),
+            therapyLearning: loadTherapyLearning()
         )
     }
 
@@ -87,6 +92,14 @@ public final class UserDefaultsSettingsStore: SettingsStore, @unchecked Sendable
             defaults.removeObject(forKey: Key.selectedPatientId)
         }
         settings.therapy.save(to: defaults)
+        if let learning = try? JSONEncoder().encode(settings.therapyLearning) {
+            defaults.set(learning, forKey: Key.therapyLearning)
+        }
+    }
+
+    private func loadTherapyLearning() -> TherapyLearning {
+        guard let data = defaults.data(forKey: Key.therapyLearning) else { return .default }
+        return (try? JSONDecoder().decode(TherapyLearning.self, from: data)) ?? .default
     }
 
     private func loadThresholds() -> Thresholds {

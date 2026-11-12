@@ -3,19 +3,33 @@ import SugarbarCore
 import SugarbarUI
 
 struct TherapySettingsView: View {
-    let store: SettingsStore
+    let model: GlucoseViewModel
     @Environment(\.dismiss) private var dismiss
 
     @State private var therapy: TherapySettings
 
-    init(store: SettingsStore = UserDefaultsSettingsStore()) {
-        self.store = store
-        _therapy = State(initialValue: store.load().therapy)
+    init(model: GlucoseViewModel) {
+        self.model = model
+        _therapy = State(initialValue: model.settings.therapy)
     }
 
     var body: some View {
         NavigationStack {
             Form {
+                if !model.therapySuggestions.isEmpty {
+                    Section {
+                        ForEach(model.therapySuggestions, id: \.quantity) { suggestion in
+                            TherapySuggestionRow(
+                                suggestion: suggestion,
+                                onAccept: {
+                                    model.acceptSuggestion(suggestion)
+                                    therapy[suggestion.quantity] = suggestion.suggested
+                                },
+                                onDismiss: { model.dismissSuggestion(suggestion) }
+                            )
+                        }
+                    }
+                }
                 Section {
                     TherapySettingsFields(therapy: $therapy)
                 } footer: {
@@ -26,18 +40,32 @@ struct TherapySettingsView: View {
                         Text(TherapySettingsFields.note)
                     }
                 }
+                Section {
+                    TherapyEstimateRows(
+                        estimate: model.therapyEstimate,
+                        therapy: model.settings.therapy,
+                        isEstimating: model.isEstimatingTherapy,
+                        onEstimate: model.recomputeTherapyEstimate
+                    )
+                } header: {
+                    Text("Learned from History")
+                } footer: {
+                    Text(TherapyEstimateRows.note)
+                }
+                Section("Therapy Changes") {
+                    TherapyChangeLogRows(changes: model.settings.therapyLearning.changes)
+                }
             }
             .navigationTitle("Therapy Settings")
             .navigationBarTitleDisplayMode(.inline)
+            .task { model.refreshTherapyEstimateIfDue() }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
-                        var settings = store.load()
-                        settings.therapy = therapy
-                        store.save(settings)
+                        model.saveTherapy(therapy)
                         dismiss()
                     }
                     .disabled(!therapy.isValid)

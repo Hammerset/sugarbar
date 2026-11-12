@@ -19,6 +19,8 @@ final class GlucoseViewModel {
     private(set) var healthKitError: String?
     private(set) var forecast: Forecast?
     private(set) var settings: Settings
+    private(set) var therapyEstimate: TherapyEstimate?
+    private(set) var isEstimatingTherapy = false
 
     private let settingsStore: SettingsStore
     private let credentialStore: CredentialStore
@@ -121,6 +123,50 @@ final class GlucoseViewModel {
     /// The settings sheets write straight to the store, so pick their changes up when they close.
     func reloadSettings() {
         settings = settingsStore.load()
+        refreshForecast()
+    }
+
+    var therapySuggestions: [TherapySuggestion] {
+        settings.visibleSuggestions(therapyEstimate)
+    }
+
+    func refreshTherapyEstimateIfDue() {
+        if let therapyEstimate, Date().timeIntervalSince(therapyEstimate.computedAt) < therapyEstimateInterval { return }
+        recomputeTherapyEstimate()
+    }
+
+    func recomputeTherapyEstimate() {
+        guard !isEstimatingTherapy else { return }
+        isEstimatingTherapy = true
+        let history = historyStore
+        let meals = mealStore.load()
+        let settings = settings
+        Task {
+            therapyEstimate = await Task.detached(priority: .utility) {
+                estimateTherapy(history: history, meals: meals, settings: settings)
+            }.value
+            isEstimatingTherapy = false
+        }
+    }
+
+    /// Other sheets write the shared store directly, so each change starts from what is stored.
+    func acceptSuggestion(_ suggestion: TherapySuggestion) {
+        applySettings(settingsStore.load().accepting(suggestion, at: Date()))
+        recomputeTherapyEstimate()
+    }
+
+    func dismissSuggestion(_ suggestion: TherapySuggestion) {
+        applySettings(settingsStore.load().dismissing(suggestion))
+    }
+
+    func saveTherapy(_ therapy: TherapySettings) {
+        applySettings(settingsStore.load().editingTherapy(therapy, at: Date()))
+        recomputeTherapyEstimate()
+    }
+
+    private func applySettings(_ newSettings: Settings) {
+        settings = newSettings
+        settingsStore.save(newSettings)
         refreshForecast()
     }
 
@@ -235,7 +281,10 @@ final class GlucoseViewModel {
         let outcome = await pollGlucose()
         refreshForecast()
         await alerter.evaluate(latest: latest, sensorActivation: sensorActivation, forecast: forecast, now: now)
-        if includingInsulin { Task { await refreshDosesIfDue() } }
+        if includingInsulin {
+            Task { await refreshDosesIfDue() }
+            refreshTherapyEstimateIfDue()
+        }
         return outcome
     }
 
