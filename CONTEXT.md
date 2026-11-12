@@ -100,6 +100,14 @@ _Avoid_: IOB in UI text, active insulin.
 Grams of logged Meal carbs not yet absorbed at a moment, with each Meal absorbing evenly over the carb absorption time.
 _Avoid_: COB in UI text, active carbs.
 
+**History Summary**:
+The compact text account of recent **History**, **Doses**, **Meals**, thresholds and **Therapy Settings** that Ask Claude sends to Claude: the last 24 hours at 15-minute resolution with every event, one line per day, and a median-by-hour profile, in mmol/L and local time. Built once per conversation.
+_Avoid_: export, report, dump.
+
+**Ask Claude**:
+A chat with Claude about the user's own **History Summary**. Multi-turn within a session, held in memory only. Gives observations and things to discuss with a care team, never a dose for the future.
+_Avoid_: assistant, coach, advice.
+
 ## Relationships
 
 - A **Primary** shares to one or more **Followers**; sugarbar authenticates as a **Follower**.
@@ -115,6 +123,7 @@ _Avoid_: COB in UI text, active carbs.
 - A **Meal** always passes through an **Estimate** and a user review; the stored Meal is the user's figure, not Claude's.
 - A **Forecast** needs complete **Therapy Settings** and a fresh **Reading**; there is none from a Stale Reading, a LO/HI Reading, or during a **Sensor State**.
 - A **Forecast** counts only **Bolus** Doses; **Basal** is assumed to cover background needs. A Pen Dose not yet synced to Glooko is missing from it unless it was entered as a **Manual Dose**, so a Forecast right after an unsynced, unentered Bolus reads too high.
+- An **Ask Claude** conversation is pinned to the **History Summary** built for its first question; Readings that arrive later are not in it until **Start Over**.
 - Meals live in the App Group (phone, Mac panel, widget) and are mirrored to Apple Health. Nothing flows from Meals to Glooko.
 
 ## Example dialogue

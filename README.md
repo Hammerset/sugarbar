@@ -10,6 +10,8 @@ Optionally overlays insulin doses from a **Glooko** account — connected-pen bo
 
 The iOS app can also log **meals** from a photo: Claude (Sonnet 5.5, via your own pay-per-use API key) estimates the carbohydrates, you review and adjust the grams, and the meal is saved alongside the glucose history and written to Apple Health. Meals show as markers on the graph on both platforms.
 
+**Ask Claude** (both apps, opt-in with the same API key): a chat about your recent data. The app sends Claude (Opus 5.5) a compact summary of the last 14 days of History, Doses, Meals, thresholds and therapy settings, and you ask questions such as what happened after your last meal or when you tend to go low. Answers are observations and things to discuss with your care team, never dosing instructions. See [Ask Claude](#ask-claude).
+
 Both apps can optionally post **low/high alerts** as local notifications (off by default; see [Alerts](#alerts)).
 
 A pure **forecast** module in the core predicts where glucose is heading, and where it settles, from recent readings, bolus doses and meals (Loop-style insulin activity curve, linear carb absorption, short-term momentum). It needs your personal therapy settings — insulin sensitivity and carb ratio, entered under **Therapy Settings** on Mac or iPhone — and stays off until both are set. It is informational and never suggests a dose.
@@ -97,6 +99,15 @@ Alerts are evaluated after each poll, so they are only as timely as polling: on 
 
 On iOS, lows and urgent levels use the time-sensitive interruption level so they can break through a Focus. That needs the **Time Sensitive Notifications** capability on the app's identifier: with Automatic signing, add it under Signing & Capabilities (the entitlement is already in `SugarbarIOS.entitlements`). The Mac app posts at the default level; its ad-hoc-signed build can't carry that restricted entitlement.
 
+## Ask Claude
+
+Open it from **Ask Claude** on the iOS Trends screen or the Mac panel. It needs a Claude API key: on iOS the one from the Meals card, on the Mac **Settings → Claude API Key** (each app keeps its own key in its Keychain; `SUGARBAR_ANTHROPIC_API_KEY` overrides both).
+
+- On the first question the app builds a History Summary (`historySummary` in `SugarbarCore/HistorySummary.swift`): the last 24 hours as 15-minute means with every Dose, Meal and low episode timestamped in local time, one line per day for the 14 days (Time in Range per Band, mean, min/max, lows, bolus times and totals, basal total, carbs and Meals), and a median-by-hour profile. Units and the time zone are stated. A 14-day summary is about 8 KB (roughly 3k tokens).
+- The summary goes in the system prompt, marked for prompt caching, and stays fixed for the conversation; each follow-up resends the conversation so far, with Claude's previous replies passed back unchanged. **Start Over** drops the conversation and rebuilds the summary on the next question.
+- The conversation lives in memory only. Nothing is stored off the device apart from the request to the Claude API.
+- Pen Doses only appear after an NFC sync and Meals only if logged; the summary and the prompt say so, so Claude can flag missing data.
+
 ## Test
 
 ```sh
@@ -109,8 +120,8 @@ swift test
 |---|---|
 | `project.yml` | XcodeGen spec for the Xcode project — the macOS app, iOS app, and widget extension targets. The `.xcodeproj` is generated from this, not committed. |
 | `Package.swift` | SwiftPM package exposing the `SugarbarCore`/`SugarbarUI` libraries consumed by both app targets. Source of truth for the core; `swift test` runs against it. |
-| `Sources/SugarbarCore/` | Source-agnostic domain + the LibreLinkUp client (auth, region redirect, fetch, polling, staleness), the Glooko client (web sign-in, CGM + dose fetch, backfill), the file-backed history store, and the meal analyzer (one Claude Messages API call, lenient JSON parsing). No AppKit/UIKit. |
-| `Sources/SugarbarUI/` | Shared SwiftUI presentation (band colours, `BarContent` text/glyph/tint, the history chart, alert settings rows) and notification delivery for alerts, consumed by both app targets. |
+| `Sources/SugarbarCore/` | Source-agnostic domain + the LibreLinkUp client (auth, region redirect, fetch, polling, staleness), the Glooko client (web sign-in, CGM + dose fetch, backfill), the file-backed history store, the Claude client shared by the meal analyzer (one Messages API call, lenient JSON parsing) and Ask Claude (History Summary + multi-turn conversation). No AppKit/UIKit. |
+| `Sources/SugarbarUI/` | Shared SwiftUI presentation (band colours, `BarContent` text/glyph/tint, the history chart, alert settings rows, the Ask Claude chat) and notification delivery for alerts, consumed by both app targets. |
 | `Sources/Sugarbar/` | The macOS app: menu-bar item, SwiftUI panel, settings, view model, app lifecycle. Built by the `Sugarbar` Xcode target. |
 | `Sources/SugarbarIOS/` | The iOS app: sign-in, foreground polling, best-effort `BGAppRefreshTask` background top-up, current-reading screen, meal photo logging (camera/library, Claude estimate, review, HealthKit write), App Group snapshot + WidgetKit reload. Built by the `SugarbarIOS` Xcode target. |
 | `Sources/SugarbarWidget/` | The WidgetKit extension: Home Screen (`systemSmall`/`systemMedium`, full colour) and Lock Screen (`accessoryCircular`/`accessoryRectangular`/`accessoryInline`, band conveyed by gauge fill/shape) glucose widgets. Reads the App Group snapshot only — no networking. Built by the `SugarbarWidget` Xcode target, embedded in `SugarbarIOS`. |

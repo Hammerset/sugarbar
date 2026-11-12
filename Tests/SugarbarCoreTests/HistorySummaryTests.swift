@@ -33,6 +33,7 @@ func syntheticHistory(days: Int, now: Date) -> (readings: [Reading], doses: [Ins
         meals.append(Meal(timestamp: midnight.addingTimeInterval(12.1 * 3600), carbsGrams: 62, summary: "Spaghetti bolognese,\nlarge plate"))
         day = day.addingTimeInterval(86400)
     }
+    doses.append(.manual(kind: .bolus, units: 2, timestamp: now.addingTimeInterval(-30 * 60), insulinName: nil))
     return (readings, doses, meals)
 }
 
@@ -64,7 +65,8 @@ func syntheticHistory(days: Int, now: Date) -> (readings: [Reading], doses: [Ins
         #expect(rows.last?.split(separator: " ").count == 3)
         #expect(rows.dropLast().allSatisfy { $0.split(separator: " ").count == 6 })
         #expect(section.contains("- Wed 18:30 bolus 5.5 u (NovoRapid, pen)"))
-        #expect(section.contains("- Wed 22:00 basal 18 u (Tresiba, logged by hand)"))
+        #expect(section.contains("- Wed 22:00 basal 18 u (Tresiba, typed into Glooko)"))
+        #expect(section.contains("- Thu 13:37 bolus 2 u (entered in sugarbar, pen not yet synced)"))
         #expect(section.contains("- Thu 07:36 meal 45 g carbs \"Oatmeal with berries\""))
         #expect(section.contains("- Thu 02:36 low until 03:24, lowest 2.8 at 03:00"))
         #expect(!section.contains("Tue "))
@@ -80,6 +82,8 @@ func syntheticHistory(days: Int, now: Date) -> (readings: [Reading], doses: [Ins
         #expect(full.contains("coverage 100%"))
         #expect(full.contains("lows 1: 02:36 (lowest 2.8)"))
         #expect(full.contains("bolus 15.5 u (07:30 4, 12:00 6, 18:30 5.5), basal 18 u"))
+        let today = try #require(lines.last)
+        #expect(today.contains("bolus 12 u (07:30 4, 12:00 6, 13:37 2 entered in sugarbar)"))
         #expect(full.contains("carbs 107 g (07:36 45 g \"Oatmeal with berries\", 12:06 62 g \"Spaghetti bolognese, large plate\")"))
         #expect(full.contains("TIR urgent low "))
     }

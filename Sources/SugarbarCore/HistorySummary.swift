@@ -103,7 +103,7 @@ private struct SummaryBuilder {
             "Units: glucose mmol/L, insulin units (u), carbohydrate grams (g). All times are local, time zone \(timeZone.identifier) (\(utc)).",
             "Bands: urgent low <\(mmol(thresholds.urgentLow)), low <\(mmol(thresholds.low)), in range \(mmol(thresholds.low))–\(mmol(thresholds.high)), high >\(mmol(thresholds.high)), urgent high >\(mmol(thresholds.urgentHigh)).",
             "Therapy settings: \(therapyLine()).",
-            "Sources: Readings from a FreeStyle Libre 3 CGM (1-minute live, 5-minute backfill). Doses from Glooko: pen Doses only appear after the pen is synced over NFC, so recent Doses may be missing. Meals only if the user logged them in the app. Basal Doses are long-acting insulin.",
+            "Sources: Readings from a FreeStyle Libre 3 CGM (1-minute live, 5-minute backfill). Doses from Glooko: pen Doses only appear after the pen is synced over NFC, so recent Doses may be missing unless the user entered them in sugarbar (marked as such; Glooko's copy replaces them once synced). Meals only if the user logged them in the app. Basal Doses are long-acting insulin.",
         ]
         if let latest = readings.last {
             lines.append("Latest Reading: \(mmol(latest.value)) at \(format(latest.timestamp, "EEE HH:mm")), trend \(trendLabel(latest.trend)).")
@@ -216,7 +216,7 @@ private struct SummaryBuilder {
         let boluses = doses.filter { $0.kind == .bolus }
         var insulin = "bolus \(formatUnits(totals.bolus)) u"
         if !boluses.isEmpty {
-            insulin += " (" + boluses.map { "\(format($0.timestamp, "HH:mm")) \(formatUnits($0.units))" }.joined(separator: ", ") + ")"
+            insulin += " (" + boluses.map { "\(format($0.timestamp, "HH:mm")) \(formatUnits($0.units))\($0.isManual ? " entered in sugarbar" : "")" }.joined(separator: ", ") + ")"
         }
         insulin += ", basal \(formatUnits(totals.basal)) u"
         parts.append(insulin)
@@ -252,7 +252,7 @@ private struct SummaryBuilder {
     }
 
     private func doseSource(_ dose: InsulinDose) -> String {
-        let source = dose.isManualEntry ? "logged by hand" : "pen"
+        let source = dose.isManual ? "entered in sugarbar, pen not yet synced" : dose.isFromPen ? "pen" : "typed into Glooko"
         if let name = dose.insulinName, !name.isEmpty { return " (\(name), \(source))" }
         return " (\(source))"
     }
