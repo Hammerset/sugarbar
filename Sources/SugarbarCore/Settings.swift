@@ -7,6 +7,7 @@ public struct Settings: Equatable, Sendable {
     public var disclaimerAcknowledged: Bool
     public var alerts: AlertSettings
     public var therapy: TherapySettings
+    public var dosing: DosingSettings
 
     public init(
         thresholds: Thresholds,
@@ -14,7 +15,8 @@ public struct Settings: Equatable, Sendable {
         selectedPatientId: String?,
         disclaimerAcknowledged: Bool,
         alerts: AlertSettings = .default,
-        therapy: TherapySettings = .default
+        therapy: TherapySettings = .default,
+        dosing: DosingSettings = .default
     ) {
         self.thresholds = thresholds
         self.pollCadence = pollCadence
@@ -22,6 +24,7 @@ public struct Settings: Equatable, Sendable {
         self.disclaimerAcknowledged = disclaimerAcknowledged
         self.alerts = alerts
         self.therapy = therapy
+        self.dosing = dosing
     }
 
     public static let cadenceRange: ClosedRange<TimeInterval> = 30...300
@@ -52,6 +55,7 @@ public final class UserDefaultsSettingsStore: SettingsStore, @unchecked Sendable
         static let selectedPatientId = "connection.patientId"
         static let disclaimerAcknowledged = "disclaimer.acknowledged"
         static let alerts = "alerts.settings"
+        static let dosing = "dosing.settings"
     }
 
     private let defaults: UserDefaults
@@ -67,7 +71,8 @@ public final class UserDefaultsSettingsStore: SettingsStore, @unchecked Sendable
             selectedPatientId: defaults.string(forKey: Key.selectedPatientId),
             disclaimerAcknowledged: defaults.bool(forKey: Key.disclaimerAcknowledged),
             alerts: loadAlerts(),
-            therapy: TherapySettings.load(from: defaults)
+            therapy: TherapySettings.load(from: defaults),
+            dosing: loadDosing()
         )
     }
 
@@ -87,6 +92,9 @@ public final class UserDefaultsSettingsStore: SettingsStore, @unchecked Sendable
             defaults.removeObject(forKey: Key.selectedPatientId)
         }
         settings.therapy.save(to: defaults)
+        if let dosing = try? JSONEncoder().encode(settings.dosing) {
+            defaults.set(dosing, forKey: Key.dosing)
+        }
     }
 
     private func loadThresholds() -> Thresholds {
@@ -102,6 +110,11 @@ public final class UserDefaultsSettingsStore: SettingsStore, @unchecked Sendable
     private func loadAlerts() -> AlertSettings {
         guard let data = defaults.data(forKey: Key.alerts) else { return .default }
         return (try? JSONDecoder().decode(AlertSettings.self, from: data)) ?? .default
+    }
+
+    private func loadDosing() -> DosingSettings {
+        guard let data = defaults.data(forKey: Key.dosing) else { return .default }
+        return (try? JSONDecoder().decode(DosingSettings.self, from: data)) ?? .default
     }
 
     private func loadCadence() -> TimeInterval {

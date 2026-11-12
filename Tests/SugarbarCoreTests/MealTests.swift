@@ -179,3 +179,56 @@ private func messagesResponse(text: String, stopReason: String = "end_turn") -> 
         return [properties[kCGImagePropertyPixelWidth] as? Int ?? 0, properties[kCGImagePropertyPixelHeight] as? Int ?? 0]
     }
 }
+
+@Suite struct MealPlanningTests {
+    private let now = Date(timeIntervalSince1970: 1_794_488_820)
+
+    @Test func decodesMealsSavedBeforePlanningAsEaten() throws {
+        let stored = #"[{"id":"6F9619FF-8B86-D011-B42D-00C04FC964FF","timestamp":800000000,"carbsGrams":45,"summary":"Oatmeal"}]"#
+        let meal = try #require(try JSONDecoder().decode([Meal].self, from: Data(stored.utf8)).first)
+        #expect(meal.isEaten)
+        #expect(meal.carbsGrams == 45)
+        #expect(meal.estimatedCarbsGrams == nil && meal.fatGrams == nil && meal.plan == nil && meal.absorption == nil)
+
+        let planned = Meal(
+            timestamp: now, carbsGrams: 60, summary: "Pizza", estimatedCarbsGrams: 62, fatGrams: 28, proteinGrams: 24,
+            energyKcal: 610, absorption: .slow, state: .planned,
+            plan: MealPlan(carbsGrams: 60, units: 6, takenUnits: 4, suggestedUnits: 6, laterNote: "2 u about 60 min after starting to eat")
+        )
+        let roundTripped = try JSONDecoder().decode(Meal.self, from: JSONEncoder().encode(planned))
+        #expect(roundTripped == planned)
+        #expect(roundTripped.plan?.remainingUnits == 2)
+    }
+
+    @Test func estimateReadsMacrosAndAbsorptionLeniently() throws {
+        let estimate = try parseMealEstimate(#"{"carbsGrams": 62, "fatGrams": 28, "proteinGrams": "lots", "energyKcal": 610, "absorption": " Slow ", "items": ["Pizza"], "confidence": "low"}"#)
+        #expect(estimate.fatGrams == 28)
+        #expect(estimate.proteinGrams == nil)
+        #expect(estimate.energyKcal == 610)
+        #expect(estimate.absorption == .slow)
+        #expect(estimate.assumptions.isEmpty)
+        #expect(try parseMealEstimate(#"{"carbsGrams": 40, "items": [], "absorption": "glacial"}"#).absorption == nil)
+    }
+
+    @Test func plannedMealsNeverCountAsEaten() throws {
+        let eaten = Meal(timestamp: now.addingTimeInterval(-3600), carbsGrams: 40, summary: "Toast", fatGrams: 9)
+        let planned = Meal(timestamp: now.addingTimeInterval(-600), carbsGrams: 80, summary: "Pasta", state: .planned, plan: MealPlan(carbsGrams: 80, units: 8, takenUnits: 8))
+        let all = [eaten, planned]
+
+        #expect(meals(all, within: .fourHours, of: now) == [eaten])
+        #expect(carbTotal(all) == 40)
+
+        let readings = (0...15).map { Reading(value: 7, timestamp: now.addingTimeInterval(Double(-$0) * 60), trend: .stable) }
+        let therapy = TherapySettings(insulinSensitivity: 2.5, carbRatio: 10)
+        let withPlan = try #require(forecast(readings: readings, doses: [], meals: all, therapy: therapy, thresholds: .standard, sensorActivation: nil, now: now))
+        let withoutPlan = try #require(forecast(readings: readings, doses: [], meals: [eaten], therapy: therapy, thresholds: .standard, sensorActivation: nil, now: now))
+        #expect(withPlan == withoutPlan)
+
+        let oslo = TimeZone(identifier: "Europe/Oslo")!
+        let summary = historySummary(readings: readings, doses: [], meals: all, thresholds: .standard, therapy: therapy, dosing: .default, now: now, days: 1, timeZone: oslo)
+        #expect(summary.contains("Planned Meal, not eaten yet: Thu 13:57 80 g carbs \"Pasta\", dose planned 8 u, 8 u logged so far."))
+        #expect(summary.contains("- Thu 13:07 meal 40 g carbs \"Toast\" (fat 9 g)"))
+        #expect(summary.contains("carbs 40 g (13:07 40 g \"Toast\")"))
+        #expect(summary.contains("rounded down to the 1 u pen step"))
+    }
+}

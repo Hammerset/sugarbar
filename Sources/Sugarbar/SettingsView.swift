@@ -49,6 +49,7 @@ struct SettingsView: View {
             ClaudeAPIKeySection(model: model)
             referenceRangeSection
             TherapySettingsSection(model: model)
+            DosingSettingsSection(model: model)
             pollingSection
             AlertsSection(model: model)
             generalSection

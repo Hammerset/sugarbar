@@ -37,7 +37,7 @@ private func body(_ request: URLRequest?) throws -> [String: Any] {
         #expect(sent["model"] as? String == "claude-opus-5-5")
         let system = try #require(sent["system"] as? [[String: Any]])
         #expect(system.count == 2)
-        #expect((system[0]["text"] as? String)?.contains("Never give a dosing instruction") == true)
+        #expect((system[0]["text"] as? String)?.contains("Anchor any amount to the app's dose calculation") == true)
         #expect(system[0]["cache_control"] == nil)
         #expect(system[1]["text"] as? String == "# History\n12:00 6.2")
         #expect((system[1]["cache_control"] as? [String: String]) == ["type": "ephemeral"])

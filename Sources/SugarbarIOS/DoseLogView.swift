@@ -4,9 +4,16 @@ import SugarbarUI
 
 struct DoseLogView: View {
     let model: GlucoseViewModel
+    var onSaved: (InsulinDose) -> Void = { _ in }
     @Environment(\.dismiss) private var dismiss
 
-    @State private var draft = DoseDraft()
+    @State private var draft: DoseDraft
+
+    init(model: GlucoseViewModel, initialDraft: DoseDraft = DoseDraft(), onSaved: @escaping (InsulinDose) -> Void = { _ in }) {
+        self.model = model
+        self.onSaved = onSaved
+        _draft = State(initialValue: initialDraft)
+    }
 
     var body: some View {
         NavigationStack {
@@ -58,6 +65,7 @@ struct DoseLogView: View {
     private func save() {
         guard let dose = draft.dose(defaultName: model.defaultInsulinName(for: draft.kind)) else { return }
         model.saveManualDose(dose, replacing: draft.editing)
+        if draft.editing == nil { onSaved(dose) }
         dismiss()
     }
 }

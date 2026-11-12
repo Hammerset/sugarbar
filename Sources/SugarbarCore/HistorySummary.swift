@@ -17,6 +17,7 @@ public func historySummary(
     meals: [Meal],
     thresholds: Thresholds,
     therapy: TherapySettings,
+    dosing: DosingSettings? = nil,
     forecast: Forecast? = nil,
     now: Date,
     days: Int = defaultSummaryDays,
@@ -26,9 +27,11 @@ public func historySummary(
     let summary = SummaryBuilder(
         readings: readings.filter { span.contains($0.timestamp) }.sorted { $0.timestamp < $1.timestamp },
         doses: doses.filter { span.contains($0.timestamp) }.sorted { $0.timestamp < $1.timestamp },
-        meals: meals.filter { span.contains($0.timestamp) }.sorted { $0.timestamp < $1.timestamp },
+        meals: eatenMeals(meals).filter { span.contains($0.timestamp) }.sorted { $0.timestamp < $1.timestamp },
+        planned: plannedMeals(meals).filter { $0.timestamp >= now.addingTimeInterval(-24 * 3600) }.sorted { $0.timestamp < $1.timestamp },
         thresholds: thresholds,
         therapy: therapy,
+        dosing: dosing,
         forecast: forecast,
         now: now,
         span: span,
@@ -46,6 +49,7 @@ public func historySummary(history: HistoryStore, meals: [Meal], settings: Setti
         meals: meals,
         thresholds: settings.thresholds,
         therapy: settings.therapy,
+        dosing: settings.dosing,
         forecast: forecast,
         now: now,
         days: days
@@ -84,8 +88,10 @@ private struct SummaryBuilder {
     let readings: [Reading]
     let doses: [InsulinDose]
     let meals: [Meal]
+    let planned: [Meal]
     let thresholds: Thresholds
     let therapy: TherapySettings
+    let dosing: DosingSettings?
     let forecast: Forecast?
     let now: Date
     let span: ClosedRange<Date>
@@ -109,6 +115,9 @@ private struct SummaryBuilder {
             "Therapy settings: \(therapyLine()).",
             "Sources: Readings from a FreeStyle Libre 3 CGM (1-minute live, 5-minute backfill). Doses from Glooko: pen Doses only appear after the pen is synced over NFC, so recent Doses may be missing unless the user entered them in sugarbar (marked as such; Glooko's copy replaces them once synced). Meals only if the user logged them in the app. Basal Doses are long-acting insulin.",
         ]
+        if let dosing {
+            lines.append("App dose calculation (Plan Meal): carbs ÷ carb ratio + (glucose − target \(mmol(dosing.targetGlucose))) ÷ insulin sensitivity − Insulin on Board, never below 0, at most \(formatUnits(dosing.maxSingleDose)) u, rounded down to the \(formatUnits(dosing.penStep)) u pen step.")
+        }
         if let latest = readings.last {
             lines.append("Latest Reading: \(mmol(latest.value)) at \(format(latest.timestamp, "EEE HH:mm")), trend \(trendLabel(latest.trend)).")
         } else {
@@ -116,6 +125,13 @@ private struct SummaryBuilder {
         }
         if let forecast {
             lines.append(forecastLine(forecast))
+        }
+        for meal in planned {
+            var line = "Planned Meal, not eaten yet: \(format(meal.timestamp, "EEE HH:mm")) \(formatGrams(meal.carbsGrams)) g carbs\(mealLabel(meal))\(macroDetail(meal))"
+            if let plan = meal.plan {
+                line += ", dose planned \(formatUnits(plan.units)) u, \(formatUnits(plan.takenUnits)) u logged so far"
+            }
+            lines.append(line + ".")
         }
         return lines.joined(separator: "\n")
     }
@@ -168,7 +184,7 @@ private struct SummaryBuilder {
             events.append((dose.timestamp, "\(dose.kind.rawValue) \(formatUnits(dose.units)) u\(doseSource(dose))"))
         }
         for meal in meals where meal.timestamp >= start {
-            events.append((meal.timestamp, "meal \(formatGrams(meal.carbsGrams)) g carbs\(mealLabel(meal))"))
+            events.append((meal.timestamp, "meal \(formatGrams(meal.carbsGrams)) g carbs\(mealLabel(meal))\(macroDetail(meal))"))
         }
         for episode in lowEpisodes(readings.filter { $0.timestamp >= start }, below: thresholds.low) {
             events.append((episode.start, "low until \(format(episode.end, "HH:mm")), lowest \(mmol(episode.nadir.value)) at \(format(episode.nadir.timestamp, "HH:mm"))"))
@@ -279,6 +295,17 @@ private struct SummaryBuilder {
             .trimmingCharacters(in: .whitespaces)
         guard !summary.isEmpty else { return "" }
         return " \"\(summary.count > 60 ? String(summary.prefix(57)) + "..." : summary)\""
+    }
+
+    private func macroDetail(_ meal: Meal) -> String {
+        var parts: [String] = []
+        if let estimate = meal.estimatedCarbsGrams, formatGrams(estimate) != formatGrams(meal.carbsGrams) {
+            parts.append("Claude estimated \(formatGrams(estimate)) g carbs")
+        }
+        if let macros = macroLine(fat: meal.fatGrams, protein: meal.proteinGrams, energy: meal.energyKcal, absorption: meal.absorption) {
+            parts.append(macros)
+        }
+        return parts.isEmpty ? "" : " (" + parts.joined(separator: "; ") + ")"
     }
 
     private func format(_ date: Date, _ pattern: String) -> String {

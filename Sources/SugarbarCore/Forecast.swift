@@ -86,7 +86,7 @@ public func forecast(
 
     let model = ExponentialInsulinModel(peak: therapy.insulinPeak, duration: therapy.insulinDuration)
     let boluses = doses.filter { $0.kind == .bolus && $0.timestamp <= now }
-    let eaten = meals.filter { $0.timestamp <= now }
+    let eaten = meals.filter { $0.isEaten && $0.timestamp <= now }
     let carbRise = sensitivity / carbRatio
 
     func carbsAbsorbed(_ meal: Meal, at date: Date) -> Double {

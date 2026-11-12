@@ -39,6 +39,17 @@ public enum Trend: Equatable, Sendable, Codable {
         }
     }
 
+    public var label: String {
+        switch self {
+        case .notDetermined: "not known"
+        case .fallingQuickly: "falling quickly"
+        case .falling: "falling"
+        case .stable: "stable"
+        case .rising: "rising"
+        case .risingQuickly: "rising quickly"
+        }
+    }
+
     public var arrowText: String? {
         switch self {
         case .notDetermined: nil

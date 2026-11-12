@@ -9,6 +9,8 @@ struct TrendsView: View {
     @State private var selectedDate: Date?
     @State private var showGlookoSignIn = false
     @State private var showMealLog = false
+    @State private var mealLogMode: MealEntryMode = .log
+    @State private var showDosingSettings = false
     @State private var showDoseLog = false
     @State private var showClaudeKey = false
     @State private var showAlerts = false
@@ -67,8 +69,11 @@ struct TrendsView: View {
                         .foregroundStyle(.tertiary)
                         .frame(maxWidth: .infinity, alignment: .center)
 
-                    Button("Therapy Settings") { showTherapySettings = true }
-                        .frame(maxWidth: .infinity, alignment: .center)
+                    HStack(spacing: 24) {
+                        Button("Therapy Settings") { showTherapySettings = true }
+                        Button("Dose Settings") { showDosingSettings = true }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .center)
 
                     Button("Sign Out", role: .destructive) {
                         model.signOut()
@@ -94,7 +99,10 @@ struct TrendsView: View {
                 DoseLogView(model: model)
             }
             .sheet(isPresented: $showMealLog) {
-                MealLogView(model: model)
+                MealLogView(model: model, mode: mealLogMode)
+            }
+            .sheet(isPresented: $showDosingSettings, onDismiss: model.reloadSettings) {
+                DosingSettingsView()
             }
             .sheet(isPresented: $showClaudeKey) {
                 ClaudeAPIKeyView(model: model)
@@ -222,12 +230,19 @@ struct TrendsView: View {
                 Text("Meals")
                     .font(.headline)
                 Spacer()
-                Button("Log Meal", systemImage: "fork.knife") { showMealLog = true }
+                Button("Plan", systemImage: "list.bullet.clipboard") { openMealLog(.plan) }
+                    .buttonStyle(.bordered)
+                Button("Log Meal", systemImage: "fork.knife") { openMealLog(.log) }
                     .buttonStyle(.bordered)
             }
             Text("\(formatGrams(carbTotal(model.chartMeals(window: window)))) g carbs logged in the last \(window.label)")
                 .font(.callout)
                 .foregroundStyle(.secondary)
+            ForEach(activeMealPlans(model.meals, now: model.now)) { meal in
+                Text(mealSummaryLine(meal))
+                    .font(.footnote)
+                    .foregroundStyle(meal.isPlanned ? Color.secondary : Color.orange)
+            }
             if let error = model.healthKitError {
                 Text(error)
                     .font(.footnote)
@@ -246,6 +261,11 @@ struct TrendsView: View {
                     .buttonStyle(.bordered)
             }
         }
+    }
+
+    private func openMealLog(_ mode: MealEntryMode) {
+        mealLogMode = mode
+        showMealLog = true
     }
 
     private var insulinTotalsRow: some View {

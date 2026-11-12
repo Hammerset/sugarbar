@@ -30,7 +30,8 @@ final class GlucoseViewModel {
     private let historyStore: HistoryStore
     private let claudeKeyStore: CredentialStore
     private let mealAnalyzer: MealAnalyzer
-    private let carbWriter: HealthKitCarbWriter
+    private let mealStrategist = MealStrategist(transport: URLSessionTransport())
+    private let mealWriter: HealthKitMealWriter
     private let reloadWidgets: () -> Void
     private let alerter = GlucoseAlerter(allowsTimeSensitive: true)
     private var engine: PollingEngine?
@@ -49,7 +50,7 @@ final class GlucoseViewModel {
         historyStore: HistoryStore = FileHistoryStore(),
         claudeKeyStore: CredentialStore = KeychainStore(servicePrefix: anthropicKeychainServicePrefix),
         mealAnalyzer: MealAnalyzer = MealAnalyzer(transport: URLSessionTransport()),
-        carbWriter: HealthKitCarbWriter = HealthKitCarbWriter(),
+        mealWriter: HealthKitMealWriter = HealthKitMealWriter(),
         reloadWidgets: @escaping () -> Void = { WidgetCenter.shared.reloadAllTimelines() }
     ) {
         self.credentialStore = credentialStore
@@ -63,7 +64,7 @@ final class GlucoseViewModel {
         self.historyStore = historyStore
         self.claudeKeyStore = claudeKeyStore
         self.mealAnalyzer = mealAnalyzer
-        self.carbWriter = carbWriter
+        self.mealWriter = mealWriter
         self.reloadWidgets = reloadWidgets
         self.isSignedIn = (try? credentialStore.loadCredentials()) != nil
         self.isGlookoSignedIn = (try? glookoCredentialStore.loadCredentials()) != nil
@@ -201,13 +202,51 @@ final class GlucoseViewModel {
         )
     }
 
+    func doseSuggestion(carbs: Double) -> DoseSuggestion {
+        suggestDose(DoseSuggestionInput(
+            carbsGrams: carbs,
+            therapy: settings.therapy,
+            dosing: settings.dosing,
+            thresholds: settings.thresholds,
+            latest: latest,
+            sensorActivation: sensorActivation,
+            insulinOnBoard: forecast?.insulinOnBoard,
+            now: Date()
+        ))
+    }
+
+    func mealStrategy(for draft: MealDraft, suggestion: DoseSuggestion) async throws -> MealStrategy {
+        guard let apiKey = Self.resolveClaudeAPIKey(claudeKeyStore) else { throw ClaudeAPIError.invalidAPIKey }
+        let description = [draft.summary, draft.note]
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .reduce(into: [String]()) { if !$0.contains($1) { $0.append($1) } }
+            .joined(separator: ". ")
+        let context = MealStrategyContext(
+            description: description,
+            estimate: draft.estimate,
+            carbsGrams: draft.carbsGrams,
+            suggestion: suggestion,
+            dosing: settings.dosing,
+            therapy: settings.therapy,
+            thresholds: settings.thresholds,
+            latest: latest,
+            forecast: forecast,
+            history: historySummary(history: historyStore, meals: mealStore.load(), settings: settings, forecast: forecast, days: mealStrategyHistoryDays),
+            now: Date()
+        )
+        return try await mealStrategist.strategy(for: context, apiKey: apiKey)
+    }
+
+    /// Only eaten Meals reach Apple Health; a plan turned into the eaten Meal is written then.
     func saveMeal(_ meal: Meal) async {
-        let isEdit = meals.contains { $0.id == meal.id }
+        let wasEaten = meals.contains { $0.id == meal.id && $0.isEaten }
         meals = mealStore.upsert(meal)
         refreshForecast()
+        guard meal.isEaten else { return }
         do {
-            if isEdit { try await carbWriter.delete(mealId: meal.id) }
-            try await carbWriter.write(meal)
+            if wasEaten { try await mealWriter.delete(mealId: meal.id) }
+            try await mealWriter.write(meal)
             healthKitError = nil
         } catch {
             logDiagnostic("healthkit", error)
@@ -218,8 +257,9 @@ final class GlucoseViewModel {
     func deleteMeal(_ meal: Meal) async {
         meals = mealStore.delete(id: meal.id)
         refreshForecast()
+        guard meal.isEaten else { return }
         do {
-            try await carbWriter.delete(mealId: meal.id)
+            try await mealWriter.delete(mealId: meal.id)
             healthKitError = nil
         } catch {
             logDiagnostic("healthkit", error)

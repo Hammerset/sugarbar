@@ -27,6 +27,7 @@ final class BarViewModel {
     private let glookoClient: GlookoClient
     private let claudeKeyStore: CredentialStore
     private let mealAnalyzer = MealAnalyzer(transport: URLSessionTransport())
+    private let mealStrategist = MealStrategist(transport: URLSessionTransport())
     private let alerter = GlucoseAlerter(allowsTimeSensitive: false)
     private var engine: PollingEngine?
     private var lastDoseFetch: Date?
@@ -116,6 +117,42 @@ final class BarViewModel {
     func estimateMeal(_ draft: MealDraft) async throws -> MealEstimate {
         guard let apiKey = Self.resolveClaudeAPIKey(claudeKeyStore) else { throw ClaudeAPIError.invalidAPIKey }
         return try await mealAnalyzer.estimate(imageJPEG: draft.photoJPEG, note: draft.note, apiKey: apiKey)
+    }
+
+    func doseSuggestion(carbs: Double) -> DoseSuggestion {
+        suggestDose(DoseSuggestionInput(
+            carbsGrams: carbs,
+            therapy: settings.therapy,
+            dosing: settings.dosing,
+            thresholds: settings.thresholds,
+            latest: latest,
+            sensorActivation: sensorActivation,
+            insulinOnBoard: forecast?.insulinOnBoard,
+            now: Date()
+        ))
+    }
+
+    func mealStrategy(for draft: MealDraft, suggestion: DoseSuggestion) async throws -> MealStrategy {
+        guard let apiKey = Self.resolveClaudeAPIKey(claudeKeyStore) else { throw ClaudeAPIError.invalidAPIKey }
+        let description = [draft.summary, draft.note]
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .reduce(into: [String]()) { if !$0.contains($1) { $0.append($1) } }
+            .joined(separator: ". ")
+        let context = MealStrategyContext(
+            description: description,
+            estimate: draft.estimate,
+            carbsGrams: draft.carbsGrams,
+            suggestion: suggestion,
+            dosing: settings.dosing,
+            therapy: settings.therapy,
+            thresholds: settings.thresholds,
+            latest: latest,
+            forecast: forecast,
+            history: historySummary(history: historyStore, meals: mealStore.load(), settings: settings, forecast: forecast, days: mealStrategyHistoryDays),
+            now: Date()
+        )
+        return try await mealStrategist.strategy(for: context, apiKey: apiKey)
     }
 
     func saveMeal(_ meal: Meal) {

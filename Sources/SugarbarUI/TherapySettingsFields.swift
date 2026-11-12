@@ -9,7 +9,7 @@ public struct TherapySettingsFields: View {
         _therapy = therapy
     }
 
-    public static let note = "Used only to forecast where glucose is heading. Informational — it never suggests a dose."
+    public static let note = "Used to forecast where glucose is heading and to calculate the Suggested Dose when you plan a meal. Check every number; you decide."
 
     public var body: some View {
         LabeledContent("Insulin sensitivity") {

@@ -124,8 +124,8 @@ public struct GlucoseHistoryChart: View {
                     y: .value("mmol/L", point.value),
                     series: .value("Segment", "forecast")
                 )
-                .lineStyle(StrokeStyle(lineWidth: 1.5, lineCap: .round, dash: [3, 4]))
-                .foregroundStyle(.secondary)
+                .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, dash: [4, 4]))
+                .foregroundStyle(Color.primary.opacity(0.7))
             }
 
             if let latest {

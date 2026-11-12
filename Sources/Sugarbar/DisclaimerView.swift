@@ -15,7 +15,7 @@ struct DisclaimerView: View {
 
             Text("Sugarbar shows glucose readings from your LibreLinkUp follower account in the menu bar.")
 
-            Text("It is not a medical device and is for information only. Readings can be delayed, stale, or wrong. Never make treatment decisions based on Sugarbar — always confirm with your FreeStyle Libre 3 app or a fingerstick.")
+            Text("It is not a medical device and is for information only. Readings can be delayed, stale, or wrong, and a suggested dose is only a calculation from the settings you entered. Check every number and make your own treatment decisions — confirm glucose with your FreeStyle Libre 3 app or a fingerstick.")
                 .foregroundStyle(.secondary)
 
             HStack {
