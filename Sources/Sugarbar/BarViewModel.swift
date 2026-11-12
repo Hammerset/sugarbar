@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import SugarbarCore
+import SugarbarUI
 
 @MainActor
 @Observable
@@ -22,6 +23,7 @@ final class BarViewModel {
     private let historyStore: HistoryStore
     private let makeClient: () -> LibreLinkUpClient
     private let glookoClient: GlookoClient
+    private let alerter = GlucoseAlerter(allowsTimeSensitive: false)
     private var engine: PollingEngine?
     private var lastDoseFetch: Date?
     private var isSyncingGlooko = false
@@ -162,6 +164,7 @@ final class BarViewModel {
         now = Date()
         meals = mealStore.load()
         let outcome = await pollGlucose()
+        await alerter.evaluate(latest: latest, sensorActivation: sensorActivation, now: now)
         Task { await refreshDosesIfDue() }
         return outcome
     }

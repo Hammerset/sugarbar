@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import SugarbarCore
+import SugarbarUI
 import WidgetKit
 
 @MainActor
@@ -29,6 +30,7 @@ final class GlucoseViewModel {
     private let mealAnalyzer: MealAnalyzer
     private let carbWriter: HealthKitCarbWriter
     private let reloadWidgets: () -> Void
+    private let alerter = GlucoseAlerter(allowsTimeSensitive: true)
     private var engine: PollingEngine?
     private var lastDoseFetch: Date?
     private var isSyncingGlooko = false
@@ -168,6 +170,7 @@ final class GlucoseViewModel {
     func pollOnce(includingInsulin: Bool = true) async -> PollOutcome {
         now = Date()
         let outcome = await pollGlucose()
+        await alerter.evaluate(latest: latest, sensorActivation: sensorActivation, now: now)
         if includingInsulin { Task { await refreshDosesIfDue() } }
         return outcome
     }

@@ -47,7 +47,9 @@ struct SettingsView: View {
             sensorSection
             glookoSection
             referenceRangeSection
+            TherapySettingsSection(model: model)
             pollingSection
+            AlertsSection(model: model)
             generalSection
             saveSection
         }

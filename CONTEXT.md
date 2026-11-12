@@ -40,6 +40,14 @@ _Avoid_: lag, delay.
 A non-reading condition the app must show gracefully: warm-up (first 60 min), signal-loss, sensor-error, sensor-ended.
 _Avoid_: status, error.
 
+**Alert**:
+A local notification that the latest live **Reading** is Low or High, raised when it enters an enabled **Band**, escalates to the urgent sub-level, or is still out of range after the repeat interval. Never raised on a **Stale** Reading or during a **Sensor State**. Opt-in, off by default.
+_Avoid_: alarm (that's the Libre app's own feature, which sugarbar does not replace), warning.
+
+**Snooze**:
+A user-chosen window during which no **Alert** is posted. An alert suppressed by a Snooze is not counted as delivered, so it fires once the Snooze ends if still applicable.
+_Avoid_: mute, silence.
+
 **Dose**:
 One insulin injection with a unit amount, a timestamp (when the pen fired, not when it synced), and a kind — **Bolus** (rapid-acting, mealtime/correction) or **Basal** (long-acting, background). Comes from Glooko, never the sensor.
 _Avoid_: injection, shot, entry.
@@ -72,6 +80,22 @@ _Avoid_: period, zoom.
 The share of a Range spent in each Band. Counted in five-minute slots, so a minute-by-minute live stretch weighs the same as a five-minute backfilled one, and time with no Readings counts for nothing.
 _Avoid_: TIR in UI copy, score, compliance.
 
+**Therapy Settings**:
+The user's personal factors the Forecast needs: insulin sensitivity (mmol/L one unit of Bolus lowers glucose), carb ratio (grams one unit covers), and insulin duration, insulin peak and carb absorption time. Sensitivity and carb ratio have no defaults; the timings default to 6 h, 75 min and 3 h.
+_Avoid_: profile, factors, ISF/ICR in UI text.
+
+**Forecast**:
+Where glucose is predicted to head, in 5-minute points from the latest Reading until every Dose and Meal has finished acting (at least 3 hours): the summed effect of Bolus insulin, Meal carbs and recent momentum (the part of the recent slope that insulin and carbs do not explain). Carries the eventual (settled) value and the first predicted crossing of the low and high thresholds. Says where glucose is heading, never how much insulin to take.
+_Avoid_: prediction (fine in prose, not as a type), projection, dose advice.
+
+**Insulin on Board**:
+Bolus units still to act at a moment, from each Dose's exponential activity curve. Basal is not counted.
+_Avoid_: IOB in UI text, active insulin.
+
+**Carbs on Board**:
+Grams of logged Meal carbs not yet absorbed at a moment, with each Meal absorbing evenly over the carb absorption time.
+_Avoid_: COB in UI text, active carbs.
+
 ## Relationships
 
 - A **Primary** shares to one or more **Followers**; sugarbar authenticates as a **Follower**.
@@ -79,10 +103,13 @@ _Avoid_: TIR in UI copy, score, compliance.
 - **History** holds each **Reading** once: the same sensor Reading arriving from LibreLinkUp and from **Backfill** (timestamps within 30 s) is kept as the first copy seen. A **Dose** is identified by its kind and timestamp; a later copy (e.g. units edited in Glooko) replaces the earlier one.
 - A **Reading**'s **Staleness** is independent of its value — a fresh-looking number can still be stale.
 - A **Sensor State** can exist with no current **Reading** (e.g. warm-up).
+- An **Alert** belongs to a family (low, high; later e.g. predicted low). Each family debounces on its own: one alert on entering, one more on escalation, then one per repeat interval; leaving the family resets it.
 - A **Dose** is independent of any **Reading**; the graph overlays Doses on Readings by time only.
 - Doses are only as fresh as the last **Pen** sync — there is no Staleness notion for them.
 - A **Meal** is independent of any **Reading** or **Dose**; the graph overlays all three by time only.
 - A **Meal** always passes through an **Estimate** and a user review; the stored Meal is the user's figure, not Claude's.
+- A **Forecast** needs complete **Therapy Settings** and a fresh **Reading**; there is none from a Stale Reading, a LO/HI Reading, or during a **Sensor State**.
+- A **Forecast** counts only **Bolus** Doses; **Basal** is assumed to cover background needs. A Pen Dose not yet synced to Glooko is missing from it, so a Forecast right after an unsynced Bolus reads too high.
 - Meals live in the App Group (phone, Mac panel, widget) and are mirrored to Apple Health. Nothing flows from Meals to Glooko.
 
 ## Example dialogue

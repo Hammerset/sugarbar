@@ -10,6 +10,8 @@ struct TrendsView: View {
     @State private var showGlookoSignIn = false
     @State private var showMealLog = false
     @State private var showClaudeKey = false
+    @State private var showAlerts = false
+    @State private var showTherapySettings = false
 
     private var thresholds: Thresholds { model.thresholds }
     private var series: [Reading] { model.chartSeries(window: window) }
@@ -50,6 +52,9 @@ struct TrendsView: View {
                         .foregroundStyle(.tertiary)
                         .frame(maxWidth: .infinity, alignment: .center)
 
+                    Button("Therapy Settings") { showTherapySettings = true }
+                        .frame(maxWidth: .infinity, alignment: .center)
+
                     Button("Sign Out", role: .destructive) {
                         model.signOut()
                     }
@@ -59,6 +64,14 @@ struct TrendsView: View {
             }
             .navigationTitle("Trends")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button("Alerts", systemImage: "bell") { showAlerts = true }
+                }
+            }
+            .sheet(isPresented: $showAlerts) {
+                AlertSettingsView()
+            }
             .sheet(isPresented: $showGlookoSignIn) {
                 GlookoSignInView(model: model)
             }
@@ -67,6 +80,9 @@ struct TrendsView: View {
             }
             .sheet(isPresented: $showClaudeKey) {
                 ClaudeAPIKeyView(model: model)
+            }
+            .sheet(isPresented: $showTherapySettings) {
+                TherapySettingsView()
             }
         }
     }
