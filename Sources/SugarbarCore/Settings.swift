@@ -6,19 +6,22 @@ public struct Settings: Equatable, Sendable {
     public var selectedPatientId: String?
     public var disclaimerAcknowledged: Bool
     public var alerts: AlertSettings
+    public var therapy: TherapySettings
 
     public init(
         thresholds: Thresholds,
         pollCadence: TimeInterval,
         selectedPatientId: String?,
         disclaimerAcknowledged: Bool,
-        alerts: AlertSettings = .default
+        alerts: AlertSettings = .default,
+        therapy: TherapySettings = .default
     ) {
         self.thresholds = thresholds
         self.pollCadence = pollCadence
         self.selectedPatientId = selectedPatientId
         self.disclaimerAcknowledged = disclaimerAcknowledged
         self.alerts = alerts
+        self.therapy = therapy
     }
 
     public static let cadenceRange: ClosedRange<TimeInterval> = 30...300
@@ -63,7 +66,8 @@ public final class UserDefaultsSettingsStore: SettingsStore, @unchecked Sendable
             pollCadence: loadCadence(),
             selectedPatientId: defaults.string(forKey: Key.selectedPatientId),
             disclaimerAcknowledged: defaults.bool(forKey: Key.disclaimerAcknowledged),
-            alerts: loadAlerts()
+            alerts: loadAlerts(),
+            therapy: TherapySettings.load(from: defaults)
         )
     }
 
@@ -82,6 +86,7 @@ public final class UserDefaultsSettingsStore: SettingsStore, @unchecked Sendable
         } else {
             defaults.removeObject(forKey: Key.selectedPatientId)
         }
+        settings.therapy.save(to: defaults)
     }
 
     private func loadThresholds() -> Thresholds {
