@@ -44,6 +44,10 @@ _Avoid_: status, error.
 A local notification that the latest live **Reading** is Low or High, raised when it enters an enabled **Band**, escalates to the urgent sub-level, or is still out of range after the repeat interval. Never raised on a **Stale** Reading or during a **Sensor State**. Opt-in, off by default.
 _Avoid_: alarm (that's the Libre app's own feature, which sugarbar does not replace), warning.
 
+**Early Warning**:
+An **Alert** raised from the **Forecast** instead of the latest Reading: "heading low" when it crosses the low threshold within the low lead time (30 min by default, on once Alerts are on), "heading high" when it crosses the high threshold within the high lead time (60 min by default, opt-in). Quiet while the latest Reading is already Low (or High), since the glucose Alert covers that. Asks the user to check, and for lows to consider carbs; never names an amount. Needs **Therapy Settings**, like the Forecast.
+_Avoid_: predictive alarm, prediction alert.
+
 **Snooze**:
 A user-chosen window during which no **Alert** is posted. An alert suppressed by a Snooze is not counted as delivered, so it fires once the Snooze ends if still applicable.
 _Avoid_: mute, silence.
@@ -89,7 +93,7 @@ The user's personal factors the Forecast needs: insulin sensitivity (mmol/L one 
 _Avoid_: profile, factors, ISF/ICR in UI text.
 
 **Forecast**:
-Where glucose is predicted to head, in 5-minute points from the latest Reading until every Dose and Meal has finished acting (at least 3 hours): the summed effect of Bolus insulin, Meal carbs and recent momentum (the part of the recent slope that insulin and carbs do not explain). Carries the eventual (settled) value and the first predicted crossing of the low and high thresholds. Says where glucose is heading, never how much insulin to take.
+Where glucose is predicted to head, in 5-minute points from the latest Reading until every Dose and Meal has finished acting (at least 3 hours): the summed effect of Bolus insulin, Meal carbs and recent momentum (the part of the recent slope that insulin and carbs do not explain). Carries the eventual (settled) value and the first predicted crossing of the low and high thresholds. Says where glucose is heading, never how much insulin to take. The graph draws the first 3 hours dashed past the latest Reading on the 4h, 12h and 24h Ranges.
 _Avoid_: prediction (fine in prose, not as a type), projection, dose advice.
 
 **Insulin on Board**:
@@ -116,7 +120,7 @@ _Avoid_: assistant, coach, advice.
 - A Glooko **Dose** supersedes at most one **Manual Dose** and vice versa, the closest in time first. If the units differ, both are kept. Everything that reads Doses (graph, totals, Forecast) sees them after superseding.
 - A **Reading**'s **Staleness** is independent of its value — a fresh-looking number can still be stale.
 - A **Sensor State** can exist with no current **Reading** (e.g. warm-up).
-- An **Alert** belongs to a family (low, high; later e.g. predicted low). Each family debounces on its own: one alert on entering, one more on escalation, then one per repeat interval; leaving the family resets it.
+- An **Alert** belongs to a family (low, high, heading low, heading high). Each family debounces on its own: one alert on entering, one more on escalation, then one per repeat interval; leaving the family resets it.
 - A **Dose** is independent of any **Reading**; the graph overlays Doses on Readings by time only.
 - Doses are only as fresh as the last **Pen** sync — there is no Staleness notion for them.
 - A **Meal** is independent of any **Reading** or **Dose**; the graph overlays all three by time only.

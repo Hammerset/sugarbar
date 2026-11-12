@@ -15,6 +15,7 @@ final class BarViewModel {
     private(set) var insulinSyncError: String?
     private(set) var meals: [Meal] = []
     private(set) var hasClaudeAPIKey = false
+    private(set) var forecast: Forecast?
 
     private let credentialStore: CredentialStore
     private let glookoCredentialStore: CredentialStore
@@ -102,15 +103,21 @@ final class BarViewModel {
         if let old { historyStore.replace(old, with: dose) } else { historyStore.append(doses: [dose]) }
         now = Date()
         historyRevision += 1
+        refreshForecast()
     }
 
     func deleteManualDose(_ dose: InsulinDose) {
         historyStore.delete(dose: dose)
         historyRevision += 1
+        refreshForecast()
     }
 
     func chartMeals(window: HistoryWindow) -> [Meal] {
         SugarbarCore.meals(meals, within: window, of: now)
+    }
+
+    func chartForecast(window: HistoryWindow) -> [ForecastPoint] {
+        window.isMultiDay ? [] : forecast?.displayPoints ?? []
     }
 
     func start() {
@@ -133,6 +140,7 @@ final class BarViewModel {
             || newSettings.selectedPatientId != settings.selectedPatientId
         settings = newSettings
         settingsStore.save(newSettings)
+        refreshForecast()
         if needsRestart { restart() }
     }
 
@@ -155,6 +163,7 @@ final class BarViewModel {
         try? credentialStore.clearToken()
         latest = nil
         sensorActivation = nil
+        forecast = nil
         availableConnections = []
         statusMessage = "Open Settings to sign in"
         graphSnapshotStore.save(GraphSnapshot(latest: nil, history: [], sensorActivation: nil))
@@ -187,7 +196,7 @@ final class BarViewModel {
         AskClaudeModel(
             makeContext: { [weak self] in
                 guard let self else { return "" }
-                return historySummary(history: historyStore, meals: mealStore.load(), settings: settingsStore.load())
+                return historySummary(history: historyStore, meals: mealStore.load(), settings: settingsStore.load(), forecast: forecast)
             },
             hasAPIKey: { [weak self] in self?.hasClaudeAPIKey ?? false },
             apiKey: { [claudeKeyStore] in Self.resolveClaudeAPIKey(claudeKeyStore) }
@@ -211,7 +220,8 @@ final class BarViewModel {
         now = Date()
         meals = mealStore.load()
         let outcome = await pollGlucose()
-        await alerter.evaluate(latest: latest, sensorActivation: sensorActivation, now: now)
+        refreshForecast()
+        await alerter.evaluate(latest: latest, sensorActivation: sensorActivation, forecast: forecast, now: now)
         Task { await refreshDosesIfDue() }
         return outcome
     }
@@ -263,6 +273,17 @@ final class BarViewModel {
         }
         isSyncingGlooko = false
         historyRevision += 1
+        refreshForecast()
+    }
+
+    private func refreshForecast() {
+        forecast = forecastFromHistory(
+            historyStore,
+            meals: meals,
+            sensorActivation: sensorActivation,
+            settings: settings,
+            now: now
+        )
     }
 
     private func startEngine() {
