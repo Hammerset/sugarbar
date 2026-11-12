@@ -218,25 +218,28 @@ struct TrendsView: View {
     @ViewBuilder
     private var mealsCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Meals")
-                .font(.headline)
+            HStack {
+                Text("Meals")
+                    .font(.headline)
+                Spacer()
+                Button("Log Meal", systemImage: "fork.knife") { showMealLog = true }
+                    .buttonStyle(.bordered)
+            }
+            Text("\(formatGrams(carbTotal(model.chartMeals(window: window)))) g carbs logged in the last \(window.label)")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+            if let error = model.healthKitError {
+                Text(error)
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+            }
             if model.hasClaudeAPIKey {
-                Text("\(formatGrams(carbTotal(model.chartMeals(window: window)))) g carbs logged in the last \(window.label)")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                if let error = model.healthKitError {
-                    Text(error)
-                        .font(.footnote)
-                        .foregroundStyle(.orange)
-                }
-                Button("Log Meal", systemImage: "camera") { showMealLog = true }
-                    .buttonStyle(.borderedProminent)
                 Button("Remove Claude API Key", role: .destructive) {
                     model.clearClaudeAPIKey()
                 }
                 .font(.footnote)
             } else {
-                Text("Add a Claude API key to log meals from a photo. Claude estimates the carbs, you confirm them, and the meal is saved to Apple Health.")
+                Text("Add a Claude API key to get carb Estimates from a photo or description. Claude estimates the carbs, you confirm them, and the meal is saved to Apple Health.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                 Button("Add Claude API Key") { showClaudeKey = true }

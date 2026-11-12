@@ -23,7 +23,7 @@ struct ClaudeAPIKeySection: View {
         } header: {
             Text("Claude API Key")
         } footer: {
-            Text("Optional. A pay-per-use key from console.anthropic.com, stored in this Mac's Keychain. Ask Claude sends a summary of your glucose, dose and meal data to the Claude API with this key; nothing else leaves the Mac.")
+            Text("Optional. A pay-per-use key from console.anthropic.com, stored in this Mac's Keychain. Ask Claude sends a summary of your glucose, dose and meal data to the Claude API with this key, and Log Meal sends the photo or description you ask it to estimate; nothing else leaves the Mac.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

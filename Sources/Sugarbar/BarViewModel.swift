@@ -26,6 +26,7 @@ final class BarViewModel {
     private let makeClient: () -> LibreLinkUpClient
     private let glookoClient: GlookoClient
     private let claudeKeyStore: CredentialStore
+    private let mealAnalyzer = MealAnalyzer(transport: URLSessionTransport())
     private let alerter = GlucoseAlerter(allowsTimeSensitive: false)
     private var engine: PollingEngine?
     private var lastDoseFetch: Date?
@@ -109,6 +110,22 @@ final class BarViewModel {
     func deleteManualDose(_ dose: InsulinDose) {
         historyStore.delete(dose: dose)
         historyRevision += 1
+        refreshForecast()
+    }
+
+    func estimateMeal(_ draft: MealDraft) async throws -> MealEstimate {
+        guard let apiKey = Self.resolveClaudeAPIKey(claudeKeyStore) else { throw ClaudeAPIError.invalidAPIKey }
+        return try await mealAnalyzer.estimate(imageJPEG: draft.photoJPEG, note: draft.note, apiKey: apiKey)
+    }
+
+    func saveMeal(_ meal: Meal) {
+        meals = mealStore.upsert(meal)
+        now = Date()
+        refreshForecast()
+    }
+
+    func deleteMeal(_ meal: Meal) {
+        meals = mealStore.delete(id: meal.id)
         refreshForecast()
     }
 

@@ -185,9 +185,9 @@ final class GlucoseViewModel {
         hasClaudeAPIKey = Self.resolveClaudeAPIKey(claudeKeyStore) != nil
     }
 
-    func estimateMeal(imageJPEG: Data, note: String) async throws -> MealEstimate {
+    func estimateMeal(_ draft: MealDraft) async throws -> MealEstimate {
         guard let apiKey = Self.resolveClaudeAPIKey(claudeKeyStore) else { throw ClaudeAPIError.invalidAPIKey }
-        return try await mealAnalyzer.estimate(imageJPEG: imageJPEG, note: note, apiKey: apiKey)
+        return try await mealAnalyzer.estimate(imageJPEG: draft.photoJPEG, note: draft.note, apiKey: apiKey)
     }
 
     /// Therapy Settings are edited straight into the shared store, so read it fresh.
@@ -201,16 +201,29 @@ final class GlucoseViewModel {
         )
     }
 
-    func logMeal(_ meal: Meal) async {
-        meals = (meals + [meal]).sorted { $0.timestamp < $1.timestamp }
-        mealStore.save(meals)
+    func saveMeal(_ meal: Meal) async {
+        let isEdit = meals.contains { $0.id == meal.id }
+        meals = mealStore.upsert(meal)
         refreshForecast()
         do {
+            if isEdit { try await carbWriter.delete(mealId: meal.id) }
             try await carbWriter.write(meal)
             healthKitError = nil
         } catch {
             logDiagnostic("healthkit", error)
             healthKitError = "Saved here, but not to Apple Health: \(error.sugarbarMessage)"
+        }
+    }
+
+    func deleteMeal(_ meal: Meal) async {
+        meals = mealStore.delete(id: meal.id)
+        refreshForecast()
+        do {
+            try await carbWriter.delete(mealId: meal.id)
+            healthKitError = nil
+        } catch {
+            logDiagnostic("healthkit", error)
+            healthKitError = "Deleted here, but not from Apple Health: \(error.sugarbarMessage)"
         }
     }
 
