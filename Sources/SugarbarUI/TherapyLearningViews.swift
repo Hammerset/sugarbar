@@ -108,7 +108,7 @@ public struct TherapyEstimateRows: View {
     private func evidenceLine(_ learned: QuantityEstimate) -> String {
         let noun = learned.quantity == .carbRatio ? "meals" : "corrections"
         let unit = learned.quantity == .carbRatio ? "g" : "mmol/L"
-        var line = "From \(learned.episodeCount) \(noun) (weight of \(formatTherapyNumber(rounded(learned.effectiveSampleSize))) recent ones), middle half \(formatTherapyNumber(rounded(learned.spread.lowerBound)))–\(formatTherapyNumber(rounded(learned.spread.upperBound))) \(unit), ±\(Int((learned.relativeStandardError * 100).rounded()))%."
+        var line = "From \(learned.episodeCount) \(noun) (weight of \(formatTherapyNumber(rounded(learned.effectiveSampleSize))) recent ones), middle half \(formatTherapyNumber(rounded(learned.spread.lowerBound)))–\(formatTherapyNumber(rounded(learned.spread.upperBound))) \(unit), \(formatRelativeError(learned.relativeStandardError))."
         if learned.quantity == .carbRatio, let basis = estimate?.carbRatioBasis {
             switch basis {
             case let .estimatedSensitivity(value): line += " Uses the learned sensitivity \(formatTherapyNumber(rounded(value)))."
