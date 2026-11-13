@@ -251,4 +251,9 @@ private func relativeError(_ value: Double?, _ truth: Double) -> Double {
         #expect(!mealCountsAsEvidence(Meal(timestamp: date, carbsGrams: 60, summary: "Pizza", state: .planned)))
         #expect(!mealCountsAsEvidence(Meal(timestamp: date, carbsGrams: 0, summary: "Coffee")))
     }
+
+    @Test func aSingleEpisodeHasNoErrorFigure() {
+        #expect(formatRelativeError(.infinity) == "error unknown")
+        #expect(formatRelativeError(0.084) == "±8%")
+    }
 }

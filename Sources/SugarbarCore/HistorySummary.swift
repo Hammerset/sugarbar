@@ -183,7 +183,7 @@ private struct SummaryBuilder {
             }
             return "\(name): no clean \(kind) episodes yet"
         }
-        var line = "\(name) about \(number(learned.value)) \(unit) from \(learned.episodeCount) \(kind) episodes (middle half \(number(learned.spread.lowerBound))–\(number(learned.spread.upperBound)), ±\(Int((learned.relativeStandardError * 100).rounded()))%)"
+        var line = "\(name) about \(number(learned.value)) \(unit) from \(learned.episodeCount) \(kind) episodes (middle half \(number(learned.spread.lowerBound))–\(number(learned.spread.upperBound)), \(formatRelativeError(learned.relativeStandardError)))"
         if !learned.hasEnoughEvidence { line += ", too little evidence to suggest" }
         if quantity == .carbRatio, let basis = estimate.carbRatioBasis {
             switch basis {

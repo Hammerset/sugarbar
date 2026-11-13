@@ -168,6 +168,12 @@ public func formatTherapyValue(_ value: Double, _ quantity: TherapyQuantity) -> 
     "1 u per \(formatTherapyNumber(value)) \(quantity == .carbRatio ? "g" : "mmol/L")"
 }
 
+/// One Episode has no spread to measure, so its error is infinite: say so instead of a number.
+public func formatRelativeError(_ error: Double) -> String {
+    guard error.isFinite else { return "error unknown" }
+    return "±\(Int((error * 100).rounded()))%"
+}
+
 public func formatTherapyNumber(_ value: Double) -> String {
     value == value.rounded() ? String(format: "%.0f", value) : String(format: "%.1f", value)
 }
