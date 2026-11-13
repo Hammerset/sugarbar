@@ -5,6 +5,7 @@ import SwiftUI
 final class StatusItemController: NSObject {
     private let statusItem: NSStatusItem
     private let popover: NSPopover
+    private let hosting: NSHostingController<PanelView>
 
     init(
         model: BarViewModel,
@@ -15,29 +16,31 @@ final class StatusItemController: NSObject {
     ) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         popover = NSPopover()
+        let popover = popover
+        hosting = NSHostingController(rootView: PanelView(
+            model: model,
+            onOpenSettings: { [weak popover] in
+                popover?.performClose(nil)
+                onOpenSettings()
+            },
+            onAskClaude: { [weak popover] in
+                popover?.performClose(nil)
+                onAskClaude()
+            },
+            onLogMeal: { [weak popover] in
+                popover?.performClose(nil)
+                onLogMeal()
+            },
+            onPlanMeal: { [weak popover] in
+                popover?.performClose(nil)
+                onPlanMeal()
+            }
+        ))
+        hosting.sizingOptions = .preferredContentSize
         super.init()
 
         popover.behavior = .transient
-        let panel = PanelView(
-            model: model,
-            onOpenSettings: { [weak self] in
-                self?.popover.performClose(nil)
-                onOpenSettings()
-            },
-            onAskClaude: { [weak self] in
-                self?.popover.performClose(nil)
-                onAskClaude()
-            },
-            onLogMeal: { [weak self] in
-                self?.popover.performClose(nil)
-                onLogMeal()
-            },
-            onPlanMeal: { [weak self] in
-                self?.popover.performClose(nil)
-                onPlanMeal()
-            }
-        )
-        popover.contentViewController = NSHostingController(rootView: panel)
+        popover.contentViewController = hosting
 
         if let button = statusItem.button {
             let label = ClickThroughHostingView(rootView: BarLabel(model: model))
@@ -66,6 +69,10 @@ final class StatusItemController: NSObject {
         if popover.isShown {
             popover.performClose(nil)
         } else {
+            if let screen = button.window?.screen ?? NSScreen.main {
+                // Room for the popover's arrow and border below the menu bar.
+                hosting.rootView.maxHeight = screen.visibleFrame.height - 40
+            }
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             popover.contentViewController?.view.window?.makeKey()
         }

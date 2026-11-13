@@ -65,7 +65,7 @@ struct MealLogWindow: View {
             recentList
                 .frame(width: 280)
         }
-        .frame(height: 720)
+        .frame(minHeight: 420, idealHeight: 720)
         .onPasteCommand(of: [.fileURL, .image]) { providers in loadPhoto(from: providers) }
         .fileImporter(isPresented: $showsFileImporter, allowedContentTypes: [.image]) { result in
             if case let .success(url) = result { loadPhoto(at: url) }

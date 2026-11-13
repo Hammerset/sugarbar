@@ -24,8 +24,19 @@ final class ManagedWindow {
             newWindow.center()
             window = newWindow
         }
+        if let window { fitOnScreen(window) }
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
+    }
+
+    private func fitOnScreen(_ window: NSWindow) {
+        guard let visible = (window.screen ?? NSScreen.main)?.visibleFrame else { return }
+        var frame = window.frame
+        frame.size.width = min(frame.width, visible.width)
+        frame.size.height = min(frame.height, visible.height)
+        frame.origin.x = min(max(frame.minX, visible.minX), visible.maxX - frame.width)
+        frame.origin.y = min(max(frame.minY, visible.minY), visible.maxY - frame.height)
+        window.setFrame(frame, display: false)
     }
 
     func close() {
