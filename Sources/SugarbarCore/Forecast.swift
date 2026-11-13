@@ -60,6 +60,8 @@ public struct Forecast: Equatable, Sendable {
 public let forecastStep: TimeInterval = 5 * 60
 /// How far ahead a chart shows the Forecast; also the shortest Forecast produced.
 public let forecastDisplayHorizon: TimeInterval = 3 * 3600
+/// The sensor's own reporting range; a Forecast outside it (or below zero) is not a meaningful number.
+public let forecastValueRange = mmolPerL(fromMgPerDl: 40)...mmolPerL(fromMgPerDl: 500)
 public let momentumWindow: TimeInterval = 15 * 60
 public let momentumBlendDuration: TimeInterval = 30 * 60
 
@@ -120,7 +122,7 @@ public func forecast(
             let midpoint = (Double(step) - 0.5) * forecastStep
             value += max(0, 1 - midpoint / momentumBlendDuration) * residualSlope * forecastStep
         }
-        points.append(ForecastPoint(date: date, value: value))
+        points.append(ForecastPoint(date: date, value: min(max(value, forecastValueRange.lowerBound), forecastValueRange.upperBound)))
     }
 
     return Forecast(
