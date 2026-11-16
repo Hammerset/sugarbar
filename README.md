@@ -84,7 +84,18 @@ If no credentials are set, the bar shows `—` and the panel reads *"Open Settin
 
 Open `Sugarbar.xcodeproj` (after `xcodegen generate`) and run the **SugarbarIOS** scheme on a simulator or device.
 
-To install on a physical device, first select your (paid) team in the `SugarbarIOS` target's Signing & Capabilities tab — signing is already set to Automatic, it just needs a team. Without a paid team, Xcode's free personal-team provisioning expires after 7 days.
+The iOS app and widget sign automatically with the owner's paid team (`DEVELOPMENT_TEAM` in `project.yml`); to build with another team, change it there (or in Signing & Capabilities). A free personal team works too, but its provisioning expires after 7 days.
+
+To install on a physical device, either pick the iPhone as the run destination in Xcode and run, or build and install from the command line:
+
+```sh
+xcodegen generate
+xcodebuild -project Sugarbar.xcodeproj -scheme SugarbarIOS -configuration Debug \
+  -destination 'generic/platform=iOS' -derivedDataPath .build/ios \
+  -allowProvisioningUpdates build
+xcrun devicectl list devices    # find the iPhone's identifier
+xcrun devicectl device install app --device <udid> .build/ios/Build/Products/Debug-iphoneos/Sugarbar.app
+```
 
 To log meals, tap **Log Meal** in the Meals card on the Trends screen. For Claude's Estimate, add a Claude API key (from console.anthropic.com) in the same card; it's stored in the phone's Keychain. `SUGARBAR_ANTHROPIC_API_KEY` in the scheme's Run arguments overrides it. Without a key you can still type the grams. The first meal save asks for Apple Health write access. On the Mac, the key goes in **Settings → Claude API Key**.
 
