@@ -8,6 +8,9 @@ public protocol HistoryStore: AnyObject, Sendable {
     @discardableResult func append(readings: [Reading]) -> Int
     @discardableResult func append(doses: [InsulinDose]) -> Int
     func delete(dose: InsulinDose)
+    /// Every stored Dose, not reconciled: a superseded manual Dose is still here.
+    func allDoses() -> [InsulinDose]
+    func earliestReadingDate() -> Date?
     func glookoCursor() -> Date?
     func setGlookoCursor(_ date: Date)
 }
@@ -171,6 +174,18 @@ public final class FileHistoryStore: HistoryStore, @unchecked Sendable {
         }
     }
 
+    public func allDoses() -> [InsulinDose] {
+        lock.withLock {
+            storedMonths(prefix: "doses-").flatMap { loadedDoses($0).values }.sorted { $0.timestamp < $1.timestamp }
+        }
+    }
+
+    public func earliestReadingDate() -> Date? {
+        lock.withLock {
+            storedMonths(prefix: "readings-").lazy.compactMap { self.loadedReadings($0).first?.timestamp }.first
+        }
+    }
+
     public func glookoCursor() -> Date? {
         guard let text = try? String(contentsOf: cursorFile, encoding: .utf8),
               let seconds = TimeInterval(text.trimmingCharacters(in: .whitespacesAndNewlines))
@@ -185,6 +200,16 @@ public final class FileHistoryStore: HistoryStore, @unchecked Sendable {
     private var cursorFile: URL { directory.appending(path: "glooko-cursor") }
     private func readingsFile(_ key: MonthKey) -> URL { directory.appending(path: "readings-\(key).tsv") }
     private func dosesFile(_ key: MonthKey) -> URL { directory.appending(path: "doses-\(key).jsonl") }
+
+    private func storedMonths(prefix: String) -> [MonthKey] {
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: directory.path(percentEncoded: false))) ?? []
+        let cached = prefix == "doses-" ? Array(doseMonths.keys) : Array(readingMonths.keys)
+        let onDisk = names.compactMap { name -> MonthKey? in
+            guard name.hasPrefix(prefix), let dot = name.lastIndex(of: ".") else { return nil }
+            return MonthKey(String(name[name.index(name.startIndex, offsetBy: prefix.count)..<dot]))
+        }
+        return Set(onDisk + cached).sorted { ($0.year, $0.month) < ($1.year, $1.month) }
+    }
 
     private func isDuplicate(_ reading: Reading, in month: [Reading]) -> Bool {
         var copy = month
@@ -273,6 +298,12 @@ public final class InMemoryHistoryStore: HistoryStore, @unchecked Sendable {
         }
     }
 
+    public func allDoses() -> [InsulinDose] {
+        lock.withLock { storedDoses.values.sorted { $0.timestamp < $1.timestamp } }
+    }
+
+    public func earliestReadingDate() -> Date? { lock.withLock { storedReadings.first?.timestamp } }
+
     public func glookoCursor() -> Date? { lock.withLock { cursor } }
     public func setGlookoCursor(_ date: Date) { lock.withLock { cursor = date } }
 }
@@ -297,7 +328,18 @@ struct MonthKey: Hashable, CustomStringConvertible {
         self.init(year: parts.year!, month: parts.month!)
     }
 
+    init?(_ text: String) {
+        let parts = text.split(separator: "-")
+        guard parts.count == 2, let year = Int(parts[0]), let month = Int(parts[1]), (1...12).contains(month) else { return nil }
+        self.init(year: year, month: month)
+    }
+
     var description: String { String(format: "%04d-%02d", year, month) }
+
+    var start: Date { Self.calendar.date(from: DateComponents(year: year, month: month, day: 1))! }
+
+    /// Every instant in the month; the History stores whole seconds.
+    var interval: ClosedRange<Date> { start...next.start.addingTimeInterval(-0.001) }
 
     var next: MonthKey { month == 12 ? MonthKey(year: year + 1, month: 1) : MonthKey(year: year, month: month + 1) }
 

@@ -52,6 +52,7 @@ struct SettingsView: View {
             DosingSettingsSection(model: model)
             pollingSection
             AlertsSection(model: model)
+            SyncSection(model: model)
             generalSection
             saveSection
         }

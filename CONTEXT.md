@@ -89,7 +89,7 @@ Claude's proposed carb figure for a Meal photo and/or description, with fat, pro
 _Avoid_: result, answer, prediction.
 
 **History**:
-The durable record of Readings and Doses kept on each device, never pruned. Fed by every successful poll and by **Backfill**; the graph and Time in Range read from it. Meals are not part of it — they already persist in the App Group.
+The durable record of Readings and Doses kept on each device, never pruned. Fed by every successful poll, by **Backfill** and by **Sync**; the graph and Time in Range read from it. Meals are not part of it — they already persist in the App Group.
 _Avoid_: log, archive, cache, database.
 
 **Backfill**:
@@ -144,6 +144,18 @@ _Avoid_: export, report, dump.
 A chat with Claude about the user's own **History Summary**. Multi-turn within a session, held in memory only. Gives observations and things to discuss with a care team, and may discuss dose amounts with reference to the app's Suggested Dose calculation and the user's working ratio and sensitivity, saying how uncertain they are.
 _Avoid_: assistant, coach, advice.
 
+**Sync**:
+Keeping Meals, Manual Doses, Readings, Glooko Doses and the shared settings the same on every device through the **Sync Server**. Local-first: each device keeps working offline, and its edits wait in an outbox until the server confirms them. The latest edit of a record wins; a deletion is an edit. Opt-in per device.
+_Avoid_: backup, cloud, import (that is **Backfill**).
+
+**Sync Server**:
+The small server the user hosts (with Postgres behind it) that every device syncs with, reached with an access token per account. It stores records as given and never interprets them.
+_Avoid_: backend, cloud, API (too generic).
+
+**First Contact**:
+A device's first Sync with a Sync Server. Meals and Manual Doses already on the device go up stamped with their own time; settings go up only when the server has none and they are not the defaults, so a fresh install never overwrites real settings.
+_Avoid_: initial import, onboarding.
+
 ## Relationships
 
 - A **Primary** shares to one or more **Followers**; sugarbar authenticates as a **Follower**.
@@ -165,7 +177,8 @@ _Avoid_: assistant, coach, advice.
 - A carb ratio is only learned given a sensitivity (the learned one when it has enough evidence, else the working one): one Meal Episode cannot separate the two.
 - A **Suggestion** changes **Therapy Settings** only when the user accepts it; every accepted or typed change goes in the **Change Log**.
 - An **Ask Claude** conversation is pinned to the **History Summary** built for its first question; Readings that arrive later are not in it until **Start Over**.
-- Meals live in each device's App Group (phone and widget; the Mac on its own). Eaten phone Meals are mirrored to Apple Health (carbs, plus fat, protein and energy when known), and editing or deleting one updates or removes its Health samples; Meal Plans and Mac Meals are not. Until sync exists, a Meal logged on one device is not seen on the other. Nothing flows from Meals to Glooko.
+- Meals live in each device's App Group (phone and widget; the Mac on its own). Eaten phone Meals are mirrored to Apple Health (carbs, plus fat, protein and energy when known), and editing or deleting one updates or removes its Health samples; Meal Plans and Mac Meals are not. With **Sync**, a Meal logged on one device reaches the other; the phone mirrors Meals that arrive through Sync to Apple Health too, and the Mac never writes Health. Nothing flows from Meals to Glooko.
+- **Sync** carries thresholds, **Therapy Settings**, **Dose Settings**, alert settings (with a **Snooze**) and the **Change Log**; poll cadence, the followed connection, sign-ins, API keys and each device's record of posted **Alerts** stay per device.
 
 ## Example dialogue
 

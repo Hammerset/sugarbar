@@ -31,6 +31,8 @@ final class BarViewModel {
     private let mealAnalyzer = MealAnalyzer(transport: URLSessionTransport())
     private let mealStrategist = MealStrategist(transport: URLSessionTransport())
     private let alerter = GlucoseAlerter(allowsTimeSensitive: false)
+    let syncSettings: SyncSettingsStore
+    let sync: SyncCoordinator
     private var engine: PollingEngine?
     private var lastDoseFetch: Date?
     private var isSyncingGlooko = false
@@ -45,7 +47,9 @@ final class BarViewModel {
         historyStore: HistoryStore = FileHistoryStore(),
         makeClient: @escaping () -> LibreLinkUpClient = { LibreLinkUpClient(transport: URLSessionTransport()) },
         glookoClient: GlookoClient = GlookoClient(transport: URLSessionTransport()),
-        claudeKeyStore: CredentialStore = KeychainStore(servicePrefix: anthropicKeychainServicePrefix)
+        claudeKeyStore: CredentialStore = KeychainStore(servicePrefix: anthropicKeychainServicePrefix),
+        syncSettings: SyncSettingsStore = SyncSettingsStore(),
+        syncStateStore: SyncStateStore = FileSyncStateStore()
     ) {
         self.credentialStore = credentialStore
         self.glookoCredentialStore = glookoCredentialStore
@@ -58,6 +62,26 @@ final class BarViewModel {
         self.settings = settingsStore.load()
         self.claudeKeyStore = claudeKeyStore
         self.hasClaudeAPIKey = Self.resolveClaudeAPIKey(claudeKeyStore) != nil
+        self.syncSettings = syncSettings
+        let syncEngine = SyncEngine(
+            configuration: { syncSettings.configuration() },
+            stateStore: syncStateStore,
+            meals: mealStore,
+            history: historyStore,
+            settings: settingsStore,
+            transport: URLSessionTransport()
+        )
+        self.sync = SyncCoordinator(engine: syncEngine, isConfigured: { syncSettings.configuration() != nil })
+        syncEngine.onRemoteChanges = { [weak self] in self?.applySyncedChanges($0) }
+    }
+
+    /// The Mac never writes Apple Health, so synced Meals only need the panel refreshed.
+    private func applySyncedChanges(_ changes: SyncAppliedChanges) {
+        meals = mealStore.load()
+        if changes.history { historyRevision += 1 }
+        if changes.settings { settings = settingsStore.load() }
+        refreshForecast()
+        if !changes.meals.isEmpty || changes.settings { recomputeTherapyEstimate() } else { refreshTherapyEstimateIfDue() }
     }
 
     var thresholds: Thresholds { settings.thresholds }
@@ -108,12 +132,14 @@ final class BarViewModel {
         now = Date()
         historyRevision += 1
         refreshForecast()
+        sync.localChangeHappened()
     }
 
     func deleteManualDose(_ dose: InsulinDose) {
         historyStore.delete(dose: dose)
         historyRevision += 1
         refreshForecast()
+        sync.localChangeHappened()
     }
 
     func estimateMeal(_ draft: MealDraft) async throws -> MealEstimate {
@@ -168,11 +194,13 @@ final class BarViewModel {
         meals = mealStore.upsert(meal)
         now = Date()
         refreshForecast()
+        sync.localChangeHappened()
     }
 
     func deleteMeal(_ meal: Meal) {
         meals = mealStore.delete(id: meal.id)
         refreshForecast()
+        sync.localChangeHappened()
     }
 
     func chartMeals(window: HistoryWindow) -> [Meal] {
@@ -186,6 +214,7 @@ final class BarViewModel {
     func start() {
         guard engine == nil else { return }
         startEngine()
+        sync.appBecameActive()
     }
 
     func pause() {
@@ -196,6 +225,7 @@ final class BarViewModel {
     func resume() {
         guard let engine else { return }
         Task { await engine.start() }
+        sync.appBecameActive()
     }
 
     func applySettings(_ newSettings: Settings) {
@@ -204,6 +234,7 @@ final class BarViewModel {
         settings = newSettings
         settingsStore.save(newSettings)
         refreshForecast()
+        sync.localChangeHappened()
         if needsRestart { restart() }
     }
 
@@ -321,6 +352,7 @@ final class BarViewModel {
         meals = mealStore.load()
         let outcome = await pollGlucose()
         refreshForecast()
+        if case .success = outcome { sync.pollSucceeded() }
         await alerter.evaluate(latest: latest, sensorActivation: sensorActivation, forecast: forecast, now: now)
         Task { await refreshDosesIfDue() }
         refreshTherapyEstimateIfDue()
