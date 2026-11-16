@@ -25,10 +25,17 @@ struct SyncIndexEntry: Codable, Equatable, Sendable {
     var fingerprint: String?
 }
 
-struct ReadingsUploadProgress: Codable, Equatable, Sendable {
-    var month: String
-    var lastUploaded: Int
-    var countAtStart: Int
+/// The first `count` Readings of a month, up to `last`, are on the server.
+struct MonthUpload: Codable, Equatable, Sendable {
+    var count = 0
+    var last = Int.min
+}
+
+/// Epoch seconds, inclusive: History another device uploaded late.
+struct HistoryRange: Codable, Equatable, Sendable {
+    static let kind = "historyUpload"
+    var from: Int
+    var to: Int
 }
 
 /// Everything the engine must remember between launches, written atomically as one file so an
@@ -42,8 +49,10 @@ public struct SyncState: Codable, Equatable, Sendable {
     var outbox: [SyncChange] = []
     var scannedKinds: Set<SyncKind> = []
     var hasPulledEverything = false
-    var readingsUploaded: [String: Int] = [:]
-    var readingsProgress: ReadingsUploadProgress?
+    var readingsUploaded: [String: MonthUpload] = [:]
+    var announced: [String: HistoryRange] = [:]
+    var lastAnnouncement: SyncStamp = 0
+    var pendingDownloads: [HistoryRange] = []
     var readingsDownloadedThrough: Int?
     var dosesUploaded: [String: String] = [:]
     var dosesDownloadedThrough: Int?

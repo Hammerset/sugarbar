@@ -103,6 +103,7 @@ public final class SyncEngine {
             try await uploadReadings(client)
             try await uploadGlookoDoses(client)
             try await downloadHistory(client)
+            if state?.outbox.isEmpty == false { try await exchangeRecords(client) }
             state?.lastSync = now()
             state?.lastError = nil
             save()
@@ -222,6 +223,12 @@ public final class SyncEngine {
         guard let state else { return }
         var newest: [SyncKind: [String: SyncChange]] = [:]
         for change in changes {
+            if change.kind == HistoryRange.kind {
+                if !change.id.hasPrefix(state.deviceId.uuidString), let range = try? change.payload?.decode(HistoryRange.self) {
+                    self.state?.pendingDownloads.append(range)
+                }
+                continue
+            }
             guard let kind = SyncKind(rawValue: change.kind) else { continue }
             if let known = state.index[kind]?[change.id]?.updatedAt, change.updatedAt <= known { continue }
             if let seen = newest[kind]?[change.id], seen.updatedAt >= change.updatedAt { continue }
@@ -259,94 +266,158 @@ public final class SyncEngine {
 
     // MARK: Readings and Glooko Doses
 
-    /// Months whose Reading count matches what was uploaded are skipped; a month that gained
-    /// Readings (a late Backfill) is sent again, which the server ignores for what it has.
+    /// Uploads each month in time order, remembering how far it got, so a sync sends only new Readings
+    /// and a broken upload resumes. A month that gained older Readings (a late Backfill) goes again whole;
+    /// the server ignores what it already has.
     private func uploadReadings(_ client: SyncClient) async throws {
         let history = history
         guard let earliest = await Task.detached(operation: { history.earliestReadingDate() }).value else { return }
+        let oldBefore = Int(now().addingTimeInterval(-Self.downloadOverlap).timeIntervalSince1970)
         for month in MonthKey.covering(earliest...max(earliest, now())) {
-            let readings = await Task.detached(operation: { history.readings(in: month.interval) }).value
+            let readings = await Task.detached(operation: { history.readings(in: month.interval) }).value.map(WireReading.init)
             let key = month.description
-            guard state?.readingsUploaded[key] != readings.count else { continue }
-            var progress = state?.readingsProgress
-            if progress?.month != key || progress?.countAtStart != readings.count { progress = nil }
-            let pending = readings.map(WireReading.init).filter { $0.t > progress?.lastUploaded ?? Int.min }
-            for start in stride(from: 0, to: pending.count, by: readingBatchSize) {
-                let batch = Array(pending[start..<min(start + readingBatchSize, pending.count)])
+            var uploaded = state?.readingsUploaded[key] ?? MonthUpload()
+            let alreadyThere = readings.partitioningIndex { $0.t > uploaded.last }
+            guard alreadyThere != readings.count || uploaded.count != readings.count else { continue }
+            if alreadyThere != uploaded.count { uploaded = MonthUpload() }
+            var start = uploaded.count
+            while start < readings.count {
+                let batch = Array(readings[start..<min(start + readingBatchSize, readings.count)])
                 try await client.upload(readings: batch)
-                state?.readingsProgress = ReadingsUploadProgress(month: key, lastUploaded: batch.last!.t, countAtStart: readings.count)
+                start += batch.count
+                uploaded = MonthUpload(count: start, last: batch.last!.t)
+                state?.readingsUploaded[key] = uploaded
+                announceUpload(of: batch.map(\.t).filter { $0 < oldBefore }, in: key)
                 save()
             }
-            state?.readingsUploaded[key] = readings.count
-            state?.readingsProgress = nil
-            save()
         }
     }
 
     private func uploadGlookoDoses(_ client: SyncClient) async throws {
         let history = history
         let doses = await Task.detached(operation: { history.allDoses().filter { !$0.isManual } }).value
+        let oldBefore = Int(now().addingTimeInterval(-Self.doseDownloadOverlap).timeIntervalSince1970)
         let byMonth = Dictionary(grouping: doses) { MonthKey($0.timestamp).description }
         for key in byMonth.keys.sorted() {
             let wire = try byMonth[key]!.sorted { $0.id < $1.id }.map(WireDose.init)
-            let fingerprint = syncFingerprint(.array(wire.map { .array([.string($0.id), $0.payload]) }))
+            let fingerprint = doseMonthFingerprint(wire)
             guard state?.dosesUploaded[key] != fingerprint else { continue }
             for start in stride(from: 0, to: wire.count, by: 1000) {
                 try await client.upload(doses: Array(wire[start..<min(start + 1000, wire.count)]))
             }
             state?.dosesUploaded[key] = fingerprint
+            announceUpload(of: wire.map(\.t).filter { $0 < oldBefore }, in: key)
             save()
         }
     }
 
+    private func doseMonthFingerprint(_ wire: [WireDose]) -> String {
+        syncFingerprint(.array(wire.map { .array([.string($0.id), $0.payload]) }))
+    }
+
+    /// Other devices only look back a little for new History, so uploading older data leaves a
+    /// `historyUpload` record (one per device and month, its range growing) telling them to fetch it.
+    private func announceUpload(of times: [Int], in month: String) {
+        guard var state, let first = times.min(), let last = times.max() else { return }
+        let previous = state.announced[month]
+        let range = HistoryRange(from: min(first, previous?.from ?? first), to: max(last, previous?.to ?? last))
+        guard range != previous, let payload = try? JSONValue(encoding: range) else { return }
+        state.announced[month] = range
+        state.lastAnnouncement = max(SyncStamp(date: now()), state.lastAnnouncement + 1)
+        state.enqueue(SyncChange(
+            kind: HistoryRange.kind,
+            id: "\(state.deviceId.uuidString)/\(month)",
+            updatedAt: state.lastAnnouncement,
+            deleted: false,
+            payload: payload
+        ))
+        self.state = state
+    }
+
     /// Readings and Doses other devices uploaded: the last 90 days on the first sync, then what came
-    /// since, looking back a little (and further once a day) for data uploaded late.
+    /// since with a short overlap (longer once a day), plus every range another device announced.
     private func downloadHistory(_ client: SyncClient) async throws {
         guard let state else { return }
         let date = now()
         let nowSeconds = Int(date.timeIntervalSince1970)
         let isDeep = state.lastDeepDownload.map { date.timeIntervalSince($0) >= Self.deepDownloadInterval } ?? true
-        let readingsOverlap = isDeep ? Self.deepDownloadOverlap : Self.downloadOverlap
         let firstFrom = nowSeconds - Int(Self.historyDays)
+        let readingsOverlap = Int(isDeep ? Self.deepDownloadOverlap : Self.downloadOverlap)
         var changed = false
 
-        let readingsFrom = state.readingsDownloadedThrough.map { $0 - Int(readingsOverlap) } ?? firstFrom
-        var after: Int?
-        while true {
-            let page = try await client.readings(from: readingsFrom, to: nowSeconds + 3600, after: after)
-            changed = storeDownloaded(page.readings.map(\.reading)) || changed
-            guard page.hasMore == true, let last = page.readings.last?.t, last > after ?? Int.min else { break }
-            after = last
-        }
+        changed = try await downloadReadings(client, from: state.readingsDownloadedThrough.map { $0 - readingsOverlap } ?? firstFrom, to: nowSeconds + 3600) || changed
         self.state?.readingsDownloadedThrough = nowSeconds
         save()
-
-        let dosesFrom = state.dosesDownloadedThrough.map { $0 - Int(Self.doseDownloadOverlap) } ?? firstFrom
-        after = nil
-        while true {
-            let page = try await client.doses(from: dosesFrom, to: nowSeconds + 3600, after: after)
-            let doses = page.doses.compactMap { try? $0.payload.decode(InsulinDose.self) }.filter { !$0.isManual }
-            changed = history.append(doses: doses) > 0 || changed
-            // `after` is exclusive on whole seconds, so step back one in case a page split a second.
-            guard page.hasMore == true, let last = page.doses.last?.t, last - 1 > after ?? Int.min else { break }
-            after = last - 1
-        }
+        changed = try await downloadDoses(client, from: state.dosesDownloadedThrough.map { $0 - Int(Self.doseDownloadOverlap) } ?? firstFrom, to: nowSeconds + 3600) || changed
         self.state?.dosesDownloadedThrough = nowSeconds
         if isDeep { self.state?.lastDeepDownload = date }
         save()
+
+        while let range = self.state?.pendingDownloads.first {
+            changed = try await downloadReadings(client, from: range.from, to: range.to) || changed
+            changed = try await downloadDoses(client, from: range.from, to: range.to) || changed
+            self.state?.pendingDownloads.removeFirst()
+            save()
+        }
         if changed { onRemoteChanges(SyncAppliedChanges(history: true)) }
     }
 
-    /// Readings from the server are already there, so a month that was fully uploaded stays so.
+    private func downloadReadings(_ client: SyncClient, from: Int, to: Int) async throws -> Bool {
+        var changed = false
+        var after: Int?
+        while true {
+            let page = try await client.readings(from: from, to: to, after: after)
+            changed = storeDownloaded(page.readings.map(\.reading)) || changed
+            guard page.hasMore == true, let last = page.readings.last?.t, last > after ?? Int.min else { return changed }
+            after = last
+        }
+    }
+
+    private func downloadDoses(_ client: SyncClient, from: Int, to: Int) async throws -> Bool {
+        var changed = false
+        var after: Int?
+        while true {
+            let page = try await client.doses(from: from, to: to, after: after)
+            let doses = page.doses.compactMap { try? $0.payload.decode(InsulinDose.self) }.filter { !$0.isManual }
+            changed = storeDownloaded(doses) || changed
+            // `after` is exclusive on whole seconds, so step back one in case a page split a second.
+            guard page.hasMore == true, let last = page.doses.last?.t, last - 1 > after ?? Int.min else { return changed }
+            after = last - 1
+        }
+    }
+
+    /// What came from the server is on the server: a month that was fully uploaded stays so,
+    /// and is neither sent back nor announced again.
     private func storeDownloaded(_ readings: [Reading]) -> Bool {
         var changed = false
-        for (key, group) in Dictionary(grouping: readings, by: { MonthKey($0.timestamp).description }) {
-            let added = history.append(readings: group)
-            guard added > 0 else { continue }
+        for (month, group) in Dictionary(grouping: readings, by: { MonthKey($0.timestamp) }) {
+            let key = month.description
+            let before = history.readings(in: month.interval)
+            guard history.append(readings: group) > 0 else { continue }
             changed = true
-            if let uploaded = state?.readingsUploaded[key] { state?.readingsUploaded[key] = uploaded + added }
+            let uploaded = state?.readingsUploaded[key] ?? MonthUpload()
+            if uploaded.count == before.count, (before.last.map { WireReading($0).t } ?? Int.min) == uploaded.last {
+                let after = history.readings(in: month.interval)
+                state?.readingsUploaded[key] = MonthUpload(count: after.count, last: after.last.map { WireReading($0).t } ?? Int.min)
+            }
         }
         return changed
+    }
+
+    private func storeDownloaded(_ doses: [InsulinDose]) -> Bool {
+        guard !doses.isEmpty else { return false }
+        func monthFingerprints() -> [String: String] {
+            let all = history.allDoses().filter { !$0.isManual }
+            return Dictionary(grouping: all) { MonthKey($0.timestamp).description }
+                .compactMapValues { list in (try? list.sorted { $0.id < $1.id }.map(WireDose.init)).map(doseMonthFingerprint) }
+        }
+        let before = monthFingerprints()
+        guard history.append(doses: doses) > 0 else { return false }
+        let after = monthFingerprints()
+        for key in Set(before.keys).union(after.keys) where state?.dosesUploaded[key] == before[key] {
+            state?.dosesUploaded[key] = after[key]
+        }
+        return true
     }
 }
 

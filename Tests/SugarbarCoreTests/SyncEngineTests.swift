@@ -345,11 +345,54 @@ import Testing
         #expect(mac.history.readings(in: window) == phone.history.readings(in: window))
         #expect(mac.history.allDoses() == [pen])
         #expect(mac.applied.contains { $0.history })
-        #expect(mac.stateStore.load()?.readingsUploaded.values.reduce(0, +) == 300)
+        #expect(mac.stateStore.load()?.readingsUploaded.values.map(\.count).reduce(0, +) == 300)
 
         let posted = server.postedReadings
         try await mac.sync()
         #expect(server.postedReadings == posted)
+    }
+
+    @Test func laterSyncsSendOnlyNewReadings() async throws {
+        let phone = device()
+        phone.history.append(readings: readings(count: 600, endingAt: clock.now))
+        try await phone.sync()
+        #expect(server.postedReadings == 600)
+        let announcements = server.recordCount
+
+        clock.advance(300)
+        phone.history.append(readings: [Reading(value: 6, timestamp: clock.now, trend: .stable)])
+        try await phone.sync()
+        #expect(server.postedReadings == 601)
+        #expect(server.recordCount == announcements)
+    }
+
+    @Test func historyUploadedLateByAnotherDeviceStillArrives() async throws {
+        let phone = device()
+        let mac = device()
+        phone.history.append(readings: readings(count: 100, endingAt: clock.now))
+        try await phone.sync()
+
+        // The Mac turns sync on a week later with a month of older History the phone never saw.
+        clock.advance(7 * 86400)
+        try await phone.sync()
+        let older = readings(count: 3000, endingAt: clock.now.addingTimeInterval(-10 * 86400), every: 600)
+        let pen = InsulinDose(kind: .bolus, units: 5, timestamp: clock.now.addingTimeInterval(-20 * 86400), insulinName: nil, deviceName: "NovoPen 6")
+        mac.history.append(readings: older)
+        mac.history.append(doses: [pen])
+        try await mac.sync()
+        try await phone.sync()
+
+        let span = older.first!.timestamp...older.last!.timestamp
+        #expect(phone.history.readings(in: span).count == 3000)
+        #expect(phone.history.allDoses() == [pen])
+
+        // What the phone downloaded is not sent back or announced again.
+        let posted = server.postedReadings
+        let records = server.recordCount
+        try await phone.sync()
+        try await mac.sync()
+        #expect(server.postedReadings == posted)
+        #expect(server.recordCount == records)
     }
 
     @Test func formatsAndParsesWireTimestampsToTheMillisecond() {
