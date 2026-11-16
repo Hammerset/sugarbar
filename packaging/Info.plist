@@ -26,5 +26,12 @@
     <true/>
     <key>NSHighResolutionCapable</key>
     <true/>
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsLocalNetworking</key>
+        <true/>
+    </dict>
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>Sugarbar syncs your meals, doses and readings with the Sync Server on your own network.</string>
 </dict>
 </plist>

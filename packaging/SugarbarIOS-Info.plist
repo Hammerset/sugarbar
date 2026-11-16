@@ -53,5 +53,12 @@
     <string>Sugarbar does not read Health data; meal nutrition is only written.</string>
     <key>NSHealthUpdateUsageDescription</key>
     <string>Sugarbar saves the carbohydrates, fat, protein and energy of the meals you log to Apple Health.</string>
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsLocalNetworking</key>
+        <true/>
+    </dict>
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>Sugarbar syncs your meals, doses and readings with the Sync Server on your own network.</string>
 </dict>
 </plist>

@@ -1,6 +1,9 @@
+name: sugarbar
+
 services:
   db:
     image: postgres:17
+    restart: unless-stopped
     environment:
       POSTGRES_USER: sugarbar
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sugarbar}
@@ -8,7 +11,7 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
     ports:
-      - "${DB_HOST_PORT:-55433}:5432"
+      - "127.0.0.1:${DB_HOST_PORT:-55433}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U sugarbar -d sugarbar"]
       interval: 5s
@@ -17,6 +20,7 @@ services:
 
   server:
     build: .
+    restart: unless-stopped
     environment:
       DATABASE_URL: postgres://sugarbar:${POSTGRES_PASSWORD:-sugarbar}@db:5432/sugarbar?sslmode=disable
       PORT: "8080"

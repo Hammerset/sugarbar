@@ -21,6 +21,12 @@ curl -H "Authorization: Bearer $TOKEN" "http://localhost:8090/v1/readings?limit=
 
 Stop with `docker compose down` (add `-v` to also delete the database volume). Set `POSTGRES_PASSWORD` in the environment or a `.env` file next to `docker-compose.yml` for anything beyond a laptop.
 
+The compose project is always named `sugarbar` (containers `sugarbar-db-1` and `sugarbar-server-1`), whichever checkout you run it from. Both containers restart with Docker (`restart: unless-stopped`), so the server comes back after a reboot as long as Docker Desktop starts at login (Settings → General → Start Docker Desktop when you sign in).
+
+### From the iPhone on the same Wi-Fi
+
+The server port listens on all interfaces; Postgres only on `127.0.0.1`. Give the phone the Mac's Bonjour name, which survives DHCP changes: `http://$(scutil --get LocalHostName).local:8090`. The Mac app itself can use `http://localhost:8090`. Both apps allow plain HTTP only to local-network hosts (`NSAllowsLocalNetworking`), and the phone asks for Local Network access on first use. If the macOS firewall is on, Docker.app must be allowed incoming connections (System Settings → Network → Firewall → Options). The phone syncs only while it can reach the Mac; changes made elsewhere wait in the outbox.
+
 Without Docker: `DATABASE_URL=postgres://… swift run sugarbar-server`.
 
 ## Configuration
@@ -54,6 +60,14 @@ In compose, prefix with `docker compose exec server`.
 ```sh
 docker compose exec -T db pg_dump -U sugarbar -Fc sugarbar > sugarbar-$(date +%F).dump
 docker compose exec -T db pg_restore -U sugarbar -d sugarbar --clean --if-exists < sugarbar-2026-11-16.dump
+```
+
+For the local server, `backup/install.sh` installs a launchd agent (`com.sugarbar.server-backup`) that runs `backup/backup.sh` daily at 03:30 (or at the next wake): a `pg_dump -Fc` of `sugarbar-db-1` into `~/Documents/privat/sugarbar-backups`, keeping the newest 14 (`SUGARBAR_BACKUP_DIR`, `SUGARBAR_BACKUP_KEEP` override). It logs to `~/Library/Logs/sugarbar-backup.log`; run it at once with `launchctl kickstart gui/$(id -u)/com.sugarbar.server-backup`. Check a dump by restoring it into a throwaway database:
+
+```sh
+docker exec sugarbar-db-1 createdb -U sugarbar restore_test
+docker exec -i sugarbar-db-1 pg_restore -U sugarbar -d restore_test --no-owner < sugarbar-….dump
+docker exec sugarbar-db-1 dropdb -U sugarbar restore_test
 ```
 
 Against a hosted database, run `pg_dump "$DATABASE_URL" -Fc > …` from any machine with the Postgres client tools. The dump holds health data: keep it encrypted.
