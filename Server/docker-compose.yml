@@ -1,0 +1,35 @@
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: sugarbar
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sugarbar}
+      POSTGRES_DB: sugarbar
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "${DB_HOST_PORT:-55433}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sugarbar -d sugarbar"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  server:
+    build: .
+    environment:
+      DATABASE_URL: postgres://sugarbar:${POSTGRES_PASSWORD:-sugarbar}@db:5432/sugarbar?sslmode=disable
+      PORT: "8080"
+    ports:
+      - "${SERVER_HOST_PORT:-8090}:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /v1/health HTTP/1.1\\r\\nHost: x\\r\\nConnection: close\\r\\n\\r\\n' >&3 && grep -q '\"ok\"' <&3"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  pgdata:
