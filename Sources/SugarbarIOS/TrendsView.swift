@@ -15,6 +15,7 @@ struct TrendsView: View {
     @State private var showClaudeKey = false
     @State private var showAlerts = false
     @State private var showTherapySettings = false
+    @State private var showSync = false
     @State private var askClaude: AskClaudeModel?
     @State private var showAskClaude = false
 
@@ -83,6 +84,7 @@ struct TrendsView: View {
                     HStack(spacing: 24) {
                         Button("Therapy Settings") { showTherapySettings = true }
                         Button("Dose Settings") { showDosingSettings = true }
+                        Button("Sync") { showSync = true }
                     }
                     .frame(maxWidth: .infinity, alignment: .center)
 
@@ -120,6 +122,9 @@ struct TrendsView: View {
             }
             .sheet(isPresented: $showTherapySettings, onDismiss: model.reloadSettings) {
                 TherapySettingsView(model: model)
+            }
+            .sheet(isPresented: $showSync) {
+                SyncSettingsView(model: model)
             }
             .sheet(isPresented: $showAskClaude) {
                 if let askClaude {

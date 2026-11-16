@@ -2,7 +2,7 @@ import Foundation
 
 /// The personal factors the Forecast needs. Sensitivity and carb ratio have no defaults:
 /// until the user enters both, there is no Forecast.
-public struct TherapySettings: Equatable, Sendable {
+public struct TherapySettings: Equatable, Sendable, Codable {
     /// mmol/L that one unit of Bolus insulin lowers glucose by.
     public var insulinSensitivity: Double?
     /// Grams of carbohydrate covered by one unit of Bolus insulin.

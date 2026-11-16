@@ -36,6 +36,10 @@ final class GlucoseViewModel {
     private let mealWriter: HealthKitMealWriter
     private let reloadWidgets: () -> Void
     private let alerter = GlucoseAlerter(allowsTimeSensitive: true)
+    private let mealMirrorQueue: MealMirrorQueue
+    private var isMirroringMeals = false
+    let syncSettings: SyncSettingsStore
+    let sync: SyncCoordinator
     private var engine: PollingEngine?
     private var lastDoseFetch: Date?
     private var isSyncingGlooko = false
@@ -53,7 +57,10 @@ final class GlucoseViewModel {
         claudeKeyStore: CredentialStore = KeychainStore(servicePrefix: anthropicKeychainServicePrefix),
         mealAnalyzer: MealAnalyzer = MealAnalyzer(transport: URLSessionTransport()),
         mealWriter: HealthKitMealWriter = HealthKitMealWriter(),
-        reloadWidgets: @escaping () -> Void = { WidgetCenter.shared.reloadAllTimelines() }
+        reloadWidgets: @escaping () -> Void = { WidgetCenter.shared.reloadAllTimelines() },
+        syncSettings: SyncSettingsStore = SyncSettingsStore(),
+        syncStateStore: SyncStateStore = FileSyncStateStore(),
+        mealMirrorQueue: MealMirrorQueue = MealMirrorQueue()
     ) {
         self.credentialStore = credentialStore
         self.glookoCredentialStore = glookoCredentialStore
@@ -72,6 +79,49 @@ final class GlucoseViewModel {
         self.isGlookoSignedIn = (try? glookoCredentialStore.loadCredentials()) != nil
         self.meals = mealStore.load()
         self.hasClaudeAPIKey = Self.resolveClaudeAPIKey(claudeKeyStore) != nil
+        self.syncSettings = syncSettings
+        self.mealMirrorQueue = mealMirrorQueue
+        let syncEngine = SyncEngine(
+            configuration: { syncSettings.configuration() },
+            stateStore: syncStateStore,
+            meals: mealStore,
+            history: historyStore,
+            settings: settingsStore,
+            transport: URLSessionTransport()
+        )
+        self.sync = SyncCoordinator(engine: syncEngine, isConfigured: { syncSettings.configuration() != nil })
+        syncEngine.mealsWillChange = { mealMirrorQueue.add($0) }
+        syncEngine.onRemoteChanges = { [weak self] in self?.applySyncedChanges($0) }
+    }
+
+    private func applySyncedChanges(_ changes: SyncAppliedChanges) {
+        meals = mealStore.load()
+        if changes.history { historyRevision += 1 }
+        if changes.settings { settings = settingsStore.load() }
+        refreshForecast()
+        if !changes.meals.isEmpty || changes.settings { recomputeTherapyEstimate() } else { refreshTherapyEstimateIfDue() }
+        reloadWidgets()
+        if !changes.meals.isEmpty { Task { await mirrorSyncedMeals() } }
+    }
+
+    /// Delete-then-write by Meal id, so a Meal that arrives twice, or after an app kill, is in Health once.
+    private func mirrorSyncedMeals() async {
+        guard !isMirroringMeals else { return }
+        isMirroringMeals = true
+        defer { isMirroringMeals = false }
+        for id in mealMirrorQueue.pending {
+            let meal = mealStore.load().first { $0.id == id }
+            do {
+                try await mealWriter.delete(mealId: id)
+                if let meal, meal.isEaten { try await mealWriter.write(meal) }
+                mealMirrorQueue.remove(id)
+            } catch {
+                logDiagnostic("healthkit", error)
+                healthKitError = "Synced, but not to Apple Health: \(error.sugarbarMessage)"
+                return
+            }
+        }
+        healthKitError = nil
     }
 
     var thresholds: Thresholds { settings.thresholds }
@@ -105,12 +155,14 @@ final class GlucoseViewModel {
         now = Date()
         historyRevision += 1
         refreshForecast()
+        sync.localChangeHappened()
     }
 
     func deleteManualDose(_ dose: InsulinDose) {
         historyStore.delete(dose: dose)
         historyRevision += 1
         refreshForecast()
+        sync.localChangeHappened()
     }
 
     func chartMeals(window: HistoryWindow) -> [Meal] {
@@ -125,6 +177,7 @@ final class GlucoseViewModel {
     func reloadSettings() {
         settings = settingsStore.load()
         refreshForecast()
+        sync.localChangeHappened()
     }
 
     var therapySuggestions: [TherapySuggestion] {
@@ -169,6 +222,7 @@ final class GlucoseViewModel {
         settings = newSettings
         settingsStore.save(newSettings)
         refreshForecast()
+        sync.localChangeHappened()
     }
 
     func start() {
@@ -178,6 +232,8 @@ final class GlucoseViewModel {
         }
         self.engine = engine
         Task { await engine.start() }
+        sync.appBecameActive()
+        if !mealMirrorQueue.pending.isEmpty { Task { await mirrorSyncedMeals() } }
     }
 
     func stop() {
@@ -296,6 +352,7 @@ final class GlucoseViewModel {
         let wasEaten = meals.contains { $0.id == meal.id && $0.isEaten }
         meals = mealStore.upsert(meal)
         refreshForecast()
+        sync.localChangeHappened()
         guard meal.isEaten else { return }
         do {
             if wasEaten { try await mealWriter.delete(mealId: meal.id) }
@@ -310,6 +367,7 @@ final class GlucoseViewModel {
     func deleteMeal(_ meal: Meal) async {
         meals = mealStore.delete(id: meal.id)
         refreshForecast()
+        sync.localChangeHappened()
         guard meal.isEaten else { return }
         do {
             try await mealWriter.delete(mealId: meal.id)
@@ -329,6 +387,7 @@ final class GlucoseViewModel {
         refreshForecast()
         await alerter.evaluate(latest: latest, sensorActivation: sensorActivation, forecast: forecast, now: now)
         if includingInsulin {
+            if case .success = outcome { sync.pollSucceeded() }
             Task { await refreshDosesIfDue() }
             refreshTherapyEstimateIfDue()
         }

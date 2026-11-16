@@ -1,4 +1,4 @@
-public struct Thresholds: Equatable, Sendable {
+public struct Thresholds: Equatable, Sendable, Codable {
     public let urgentLow: Double
     public let low: Double
     public let high: Double
