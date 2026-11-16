@@ -1,10 +1,16 @@
 import AppKit
+import SugarbarCore
 import SugarbarUI
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItemController: StatusItemController?
-    private let model = BarViewModel()
+    private let storage = MacStorage.prepare()
+    private lazy var model = BarViewModel(
+        settingsStore: storage.settings,
+        mealStore: storage.meals,
+        historyStore: storage.history
+    )
     private let launchAtLogin = SMAppServiceLaunchAtLogin()
     private let settingsWindow = ManagedWindow(title: "Sugarbar Settings")
     private let disclaimerWindow = ManagedWindow(title: "Welcome to Sugarbar")
@@ -14,6 +20,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
+        guard storage.confirmEmptyStorageIfNeeded() else {
+            NSApp.terminate(nil)
+            return
+        }
         ForegroundNotificationPresenter.shared.install()
         statusItemController = StatusItemController(
             model: model,

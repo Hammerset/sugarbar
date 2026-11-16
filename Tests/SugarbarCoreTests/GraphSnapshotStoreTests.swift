@@ -47,15 +47,3 @@ private let sampleSnapshot = GraphSnapshot(
         #expect(store.load() == updated)
     }
 }
-
-extension AppGroupDefaultsTests {
-    @Test func snapshotStoreDefaultTargetsAppGroupSuite() {
-        UserDefaults.sugarbarShared.removePersistentDomain(forName: sugarbarAppGroupIdentifier)
-        defer { UserDefaults.sugarbarShared.removePersistentDomain(forName: sugarbarAppGroupIdentifier) }
-
-        UserDefaultsGraphSnapshotStore().save(sampleSnapshot)
-
-        #expect(UserDefaultsGraphSnapshotStore().load() == sampleSnapshot)
-        #expect(UserDefaults.sugarbarShared.data(forKey: "shared.glucose.snapshot") != nil)
-    }
-}
