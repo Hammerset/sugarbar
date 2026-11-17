@@ -279,10 +279,14 @@ struct MealLogWindow: View {
                 draft: Binding(get: { doseDraft ?? DoseDraft() }, set: { doseDraft = $0 }),
                 defaultName: model.defaultInsulinName(for: doseDraft?.kind ?? .bolus)
             )
+            let warning = doseDraft.flatMap(model.stackingWarning(for:))
+            if let warning, let doseDraft {
+                StackingWarningView(warning: warning, doseUnits: doseDraft.units, doseTime: doseDraft.timestamp)
+            }
             HStack {
                 Spacer()
                 Button("Cancel") { doseDraft = nil }
-                Button("Save Dose") { saveDose() }
+                Button(StackingWarningView.saveTitle(warning, base: "Save Dose")) { saveDose() }
                     .disabled(doseDraft?.isValid != true)
             }
         } header: {

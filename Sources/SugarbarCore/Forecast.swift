@@ -143,8 +143,7 @@ public func forecast(
     let anchor = latest.timestamp
 
     func carbsAbsorbed(_ meal: Meal, at date: Date) -> Double {
-        let elapsed = date.timeIntervalSince(meal.timestamp)
-        return meal.carbsGrams * min(max(elapsed / meal.absorptionTime(therapy), 0), 1)
+        meal.carbsAbsorbed(at: date, therapy: therapy)
     }
 
     func insulinEffect(at date: Date) -> Double {
