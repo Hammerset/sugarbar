@@ -101,9 +101,6 @@ struct MealLogWindow: View {
                 .lineLimit(2...4)
         } header: {
             Text(title)
-        } footer: {
-            Text("A photo, a description, or both. Drop or paste a photo, or take one with your iPhone.")
-                .foregroundStyle(.secondary)
         }
     }
 
@@ -177,8 +174,13 @@ struct MealLogWindow: View {
                 }
             }
         } footer: {
-            Text(MealReviewFields.note + " Saved on this Mac only: not written to Apple Health and not shown on the phone.")
-                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 4) {
+                if draft.estimate != nil { Text(MealReviewFields.note) }
+                if model.syncSettings.configuration() == nil {
+                    Text("Saved on this Mac only: not written to Apple Health and not shown on the phone.")
+                }
+            }
+            .foregroundStyle(.secondary)
         }
     }
 
@@ -291,9 +293,6 @@ struct MealLogWindow: View {
             }
         } header: {
             Text(doseCountsTowardPlan ? "Log Dose" : "Log an Earlier Dose")
-        } footer: {
-            Text(DoseEntryFields.note)
-                .foregroundStyle(.secondary)
         }
     }
 

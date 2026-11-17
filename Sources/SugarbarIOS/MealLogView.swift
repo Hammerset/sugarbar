@@ -121,8 +121,6 @@ struct MealLogView: View {
             }
             .buttonStyle(.bordered)
             TextField("Describe the meal, or add a note to the photo", text: $draft.note, axis: .vertical)
-        } footer: {
-            Text("A photo, a description, or both. Dictate with the keyboard's microphone.")
         }
     }
 
@@ -141,7 +139,7 @@ struct MealLogView: View {
                 }
                 .disabled(!draft.canEstimate || isEstimating)
             } else {
-                Text("Add a Claude API key in the Meals card to get an Estimate and a dose strategy. You can still type the grams yourself.")
+                Text("Add a Claude API key in Settings to get an Estimate and a dose strategy. You can still type the grams yourself.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -160,7 +158,7 @@ struct MealLogView: View {
         Section {
             MealReviewFields(draft: $draft, mode: mode)
         } footer: {
-            Text(MealReviewFields.note)
+            if draft.estimate != nil { Text(MealReviewFields.note) }
         }
     }
 
@@ -194,7 +192,7 @@ struct MealLogView: View {
             } header: {
                 Text("Plans and Recent Meals")
             } footer: {
-                Text("Tap to edit, swipe to delete. A plan becomes the eaten Meal when you tap Eating Now. Editing or deleting an eaten meal also updates its Apple Health entry.")
+                Text("Tap to edit, swipe to delete.")
             }
         }
     }
