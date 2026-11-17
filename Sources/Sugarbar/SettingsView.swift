@@ -21,6 +21,7 @@ struct SettingsView: View {
     @State private var thresholdError: String?
     @State private var connectionError: String?
     @State private var didSave = false
+    @State private var tab = SettingsTab.glucose
 
     init(model: BarViewModel, launchAtLogin: LaunchAtLoginControlling) {
         self.model = model
@@ -42,22 +43,39 @@ struct SettingsView: View {
     }
 
     var body: some View {
-        Form {
-            accountSection
-            sensorSection
-            glookoSection
-            ClaudeAPIKeySection(model: model)
-            referenceRangeSection
-            TherapySettingsSection(model: model)
-            DosingSettingsSection(model: model)
-            pollingSection
-            AlertsSection(model: model)
-            SyncSection(model: model)
-            generalSection
-            saveSection
+        VStack(spacing: 0) {
+            Picker("Settings", selection: $tab) {
+                ForEach(SettingsTab.allCases, id: \.self) { tab in
+                    Text(tab.title).tag(tab)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .padding([.horizontal, .top], 20)
+            .padding(.bottom, 4)
+            Form {
+                switch tab {
+                case .glucose:
+                    accountSection
+                    sensorSection
+                    referenceRangeSection
+                    pollingSection
+                    saveSection
+                    AlertsSection(model: model)
+                case .insulin:
+                    TherapySettingsSection(model: model)
+                    DosingSettingsSection(model: model)
+                case .accounts:
+                    glookoSection
+                    SyncSection(model: model)
+                    generalSection
+                case .claude:
+                    ClaudeAPIKeySection(model: model)
+                }
+            }
+            .formStyle(.grouped)
         }
-        .formStyle(.grouped)
-        .frame(width: 460)
+        .frame(width: 520)
         .frame(minHeight: 420, idealHeight: 760)
         .task {
             if isSignedIn, model.availableConnections.isEmpty { await loadConnections() }
@@ -241,6 +259,19 @@ struct SettingsView: View {
         } catch {
             logDiagnostic("loadConnections", error)
             connectionError = error.sugarbarMessage
+        }
+    }
+}
+
+private enum SettingsTab: CaseIterable {
+    case glucose, insulin, accounts, claude
+
+    var title: String {
+        switch self {
+        case .glucose: "Glucose & Alerts"
+        case .insulin: "Insulin & Meals"
+        case .accounts: "Accounts & Sync"
+        case .claude: "Claude"
         }
     }
 }
