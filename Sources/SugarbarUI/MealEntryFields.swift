@@ -228,9 +228,12 @@ public struct MealReviewFields: View {
             }
         }
         .pickerStyle(.segmented)
-        Text("Slow for pasta, pizza, creamy or fatty dishes (1.5× your carb absorption time); fast for juice, sweets or white bread (half of it).")
-            .font(.footnote)
-            .foregroundStyle(.secondary)
+        .help(Self.absorptionHelp)
+        if draft.carbAbsorption != .normal {
+            Text(Self.absorptionHelp)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
         DatePicker(
             mode == .plan ? "Eating at" : "Time",
             selection: $draft.timestamp,
@@ -240,6 +243,7 @@ public struct MealReviewFields: View {
     }
 
     public static let note = "Claude's Estimate is a starting point — check the grams before saving."
+    static let absorptionHelp = "Slow for pasta, pizza, creamy or fatty dishes (1.5× your carb absorption time); fast for juice, sweets or white bread (half of it)."
 }
 
 public struct MealEstimateDetails: View {

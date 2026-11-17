@@ -63,34 +63,30 @@ public struct MealPlanSections: View {
             }
         } header: {
             Text("Suggested Dose")
-        } footer: {
-            Text(Self.note)
         }
         .onAppear { draft.adoptSuggestion(suggestion.dose?.units) }
         .onChange(of: suggestion) { _, new in draft.adoptSuggestion(new.dose?.units) }
 
-        Section {
-            if canAskClaude {
-                HStack {
-                    Button(draft.strategy == nil ? "Get Strategy from Claude" : "Ask Again", action: onRequestStrategy)
-                        .disabled(isLoadingStrategy || !draft.isValid)
-                    if isLoadingStrategy { ProgressView().controlSize(.small) }
+        if canAskClaude || draft.strategy != nil {
+            Section {
+                if canAskClaude {
+                    HStack {
+                        Button(draft.strategy == nil ? "Get Strategy from Claude" : "Ask Again", action: onRequestStrategy)
+                            .disabled(isLoadingStrategy || !draft.isValid)
+                        if isLoadingStrategy { ProgressView().controlSize(.small) }
+                    }
                 }
-            } else {
-                Text("Add a Claude API key to get a strategy for when and how to take the dose.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                if let strategyError {
+                    Text(strategyError)
+                        .font(.footnote)
+                        .foregroundStyle(.orange)
+                }
+                if let strategy = draft.strategy {
+                    MealStrategyRows(strategy: strategy, appUnits: suggestion.dose?.units)
+                }
+            } header: {
+                Text("Strategy")
             }
-            if let strategyError {
-                Text(strategyError)
-                    .font(.footnote)
-                    .foregroundStyle(.orange)
-            }
-            if let strategy = draft.strategy {
-                MealStrategyRows(strategy: strategy, appUnits: suggestion.dose?.units)
-            }
-        } header: {
-            Text("Strategy")
         }
 
         Section {
@@ -123,7 +119,9 @@ public struct MealPlanSections: View {
         } header: {
             Text("Your Dose")
         } footer: {
-            Text("Nothing counts as taken until you log the dose. Log the first part of a split now; the rest shows as a reminder on the plan.")
+            if draft.splitsDose && draft.takenUnits == 0 {
+                Text("Log the first part now; the rest shows as a reminder on the plan.")
+            }
         }
     }
 
@@ -142,7 +140,6 @@ public struct MealPlanSections: View {
         }
     }
 
-    public static let note = "The app's calculation from your carb ratio, insulin sensitivity and target."
 }
 
 /// The parts of the app's calculation, or why there is none.
@@ -168,9 +165,6 @@ public struct SuggestedDoseRows: View {
             part("Correction", "(\(formatMmolPerL(dose.currentGlucose)) − \(formatMmolPerL(dose.targetGlucose))) ÷ \(number(dose.insulinSensitivity))", dose.correctionUnits)
             part("Insulin on board", "of \(String(format: "%.1f", dose.insulinOnBoard)) u", -dose.insulinOnBoardDeduction)
             missingDosesNote
-            Text("Using your Therapy Settings: carb ratio \(number(dose.carbRatio)) g per unit, insulin sensitivity \(number(dose.insulinSensitivity)) mmol/L per unit, target \(formatMmolPerL(dose.targetGlucose)).")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
             Text(roundingLine(dose))
                 .font(.footnote)
                 .foregroundStyle(dose.wasCapped ? .orange : .secondary)
@@ -185,9 +179,11 @@ public struct SuggestedDoseRows: View {
     private var missingDosesNote: some View {
         let prominent = doseCoverage?.mayBeMissingDoses == true
         return VStack(alignment: .leading, spacing: 4) {
-            Text(DoseCoverage.note)
-                .font(prominent ? .callout.weight(.semibold) : .footnote)
-                .foregroundStyle(prominent ? Color.orange : Color.secondary)
+            if prominent {
+                Text(DoseCoverage.note)
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(.orange)
+            }
             if prominent, let newest = doseCoverage?.newestPenDose {
                 Text("Newest pen Dose from Glooko: \(newest.formatted(.relative(presentation: .named))).")
                     .font(.footnote)
