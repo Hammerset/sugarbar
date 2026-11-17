@@ -18,6 +18,10 @@ public struct OnBoardSummary: View {
                 Text("Insulin on board \(formatUnits((forecast.insulinOnBoard * 10).rounded() / 10)) u · Carbs on board \(formatGrams(forecast.carbsOnBoard)) g")
                     .foregroundStyle(.secondary)
             }
+            if forecast.isUncertain {
+                Label("Forecast uncertain: trend differs from model", systemImage: "exclamationmark.triangle")
+                    .foregroundStyle(.orange)
+            }
         } else if !therapyComplete {
             Text("Enter Therapy Settings to see a forecast.")
                 .foregroundStyle(.tertiary)

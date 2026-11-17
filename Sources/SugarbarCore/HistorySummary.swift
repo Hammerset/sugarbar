@@ -357,6 +357,9 @@ private struct SummaryBuilder {
         if let macros = macroLine(fat: meal.fatGrams, protein: meal.proteinGrams, energy: meal.energyKcal, absorption: meal.absorption) {
             parts.append(macros)
         }
+        if meal.carbAbsorption != .normal {
+            parts.append("logged as \(meal.carbAbsorption.label.lowercased()) absorption")
+        }
         return parts.isEmpty ? "" : " (" + parts.joined(separator: "; ") + ")"
     }
 
