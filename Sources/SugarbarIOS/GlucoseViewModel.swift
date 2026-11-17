@@ -155,6 +155,7 @@ final class GlucoseViewModel {
         guard draft.editing == nil else { return nil }
         return stackingWarningFromHistory(
             historyStore,
+            meals: meals,
             units: draft.units,
             kind: draft.kind,
             timestamp: draft.timestamp,

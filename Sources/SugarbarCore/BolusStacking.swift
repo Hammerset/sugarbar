@@ -17,9 +17,13 @@ public struct StackingWarning: Equatable, Sendable {
     public let remainingEffect: Double?
     /// The same including the Bolus being entered.
     public let effectWithDose: Double?
+    /// Grams of eaten Meals not yet absorbed when the new Bolus is given.
+    public let carbsOnBoard: Double
+    /// mmol/L those carbs are still to raise glucose by; nil without insulin sensitivity or carb ratio.
+    public let remainingCarbEffect: Double?
     /// Nil without a fresh, in-range Reading.
     public let latest: Reading?
-    /// Current glucose minus `effectWithDose`: insulin alone, with no carbs counted.
+    /// Current glucose minus `effectWithDose`, plus `remainingCarbEffect` when there is one.
     public let glucoseAfterDose: Double?
     public let endsBelowLow: Bool
 }
@@ -29,11 +33,13 @@ public let stackingGroupWindow: TimeInterval = 15 * 60
 
 /// Nil for Basal, or when Insulin on Board is at or below the setting and the previous Bolus
 /// is at least the stacking interval before `timestamp`. `doses` must not include the one being entered.
+/// Carbs absorb as in the Forecast but without its retrospective slow-down, which needs the recent Readings' fit.
 public func stackingWarning(
     units: Double,
     kind: InsulinKind,
     timestamp: Date,
     doses: [InsulinDose],
+    meals: [Meal],
     latest: Reading?,
     therapy: TherapySettings,
     dosing: DosingSettings,
@@ -56,8 +62,13 @@ public func stackingWarning(
 
     let sensitivity = therapy.insulinSensitivity.flatMap { TherapySettings.sensitivityRange.contains($0) ? $0 : nil }
     let effectWithDose = sensitivity.map { (onBoard + max(0, units)) * $0 }
+    let carbRatio = therapy.carbRatio.flatMap { TherapySettings.carbRatioRange.contains($0) ? $0 : nil }
+    let carbsOnBoard = meals
+        .filter { $0.isEaten && $0.timestamp <= timestamp }
+        .reduce(0) { $0 + $1.carbsGrams - $1.carbsAbsorbed(at: timestamp, therapy: timing) }
+    let carbEffect = sensitivity.flatMap { isf in carbRatio.map { carbsOnBoard * isf / $0 } }
     let fresh = latest.flatMap { !$0.isStale(at: now) && $0.outOfRange == nil ? $0 : nil }
-    let glucoseAfter = fresh.flatMap { reading in effectWithDose.map { reading.value - $0 } }
+    let glucoseAfter = fresh.flatMap { reading in effectWithDose.map { reading.value - $0 + (carbEffect ?? 0) } }
     let lastEnd = acting.map { $0.timestamp.addingTimeInterval(timing.insulinDuration) }.max()
 
     return StackingWarning(
@@ -69,6 +80,8 @@ public func stackingWarning(
         remainingDuration: max(0, lastEnd?.timeIntervalSince(timestamp) ?? 0),
         remainingEffect: sensitivity.map { onBoard * $0 },
         effectWithDose: effectWithDose,
+        carbsOnBoard: carbsOnBoard,
+        remainingCarbEffect: carbEffect,
         latest: fresh,
         glucoseAfterDose: glucoseAfter,
         endsBelowLow: glucoseAfter.map { $0 < thresholds.low } ?? false
@@ -78,6 +91,7 @@ public func stackingWarning(
 /// The Stacking Warning for a Bolus being entered now, from History's reconciled Doses.
 public func stackingWarningFromHistory(
     _ history: HistoryStore,
+    meals: [Meal],
     units: Double,
     kind: InsulinKind,
     timestamp: Date,
@@ -91,6 +105,7 @@ public func stackingWarningFromHistory(
         kind: kind,
         timestamp: timestamp,
         doses: history.doses(in: timestamp.addingTimeInterval(-lookback)...timestamp),
+        meals: meals,
         latest: latest,
         therapy: settings.therapy,
         dosing: settings.dosing,

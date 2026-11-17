@@ -147,6 +147,12 @@ public struct Meal: Equatable, Sendable, Codable, Identifiable {
     public func absorptionTime(_ therapy: TherapySettings) -> TimeInterval {
         carbAbsorption.duration(normal: therapy.carbAbsorptionTime)
     }
+
+    /// Grams absorbed by `date`, linearly over the absorption time.
+    public func carbsAbsorbed(at date: Date, therapy: TherapySettings) -> Double {
+        let elapsed = date.timeIntervalSince(timestamp)
+        return carbsGrams * min(max(elapsed / absorptionTime(therapy), 0), 1)
+    }
     public var isPlanned: Bool { state == .planned }
 
     /// Meals saved before planning existed carry only id, time, carbs and summary, and were eaten.

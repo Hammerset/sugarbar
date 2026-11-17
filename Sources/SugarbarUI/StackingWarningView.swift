@@ -22,7 +22,14 @@ public struct StackingWarningView: View {
                 Text("Previous bolus \(formatUnits(warning.previousBolusUnits)) u at \(previous.formatted(.dateTime.hour().minute())), \(formatGap(doseTime.timeIntervalSince(previous))) before this one.")
             }
             if let remaining = warning.remainingEffect {
-                Text("Still to lower glucose by about \(formatMmolPerL(remaining)) mmol/L over the next ~\(formatHalfHours(warning.remainingDuration)).")
+                Text("Insulin still to act: −\(formatMmolPerL(remaining)) mmol/L over the next ~\(formatHalfHours(warning.remainingDuration)).")
+            }
+            if warning.carbsOnBoard >= 0.5 {
+                if let carbs = warning.remainingCarbEffect {
+                    Text("Carbs still to absorb (\(formatGrams(warning.carbsOnBoard)) g): +\(formatMmolPerL(carbs)) mmol/L.")
+                } else if warning.remainingEffect != nil {
+                    Text("Carbs on board (\(formatGrams(warning.carbsOnBoard)) g) are not counted without a carb ratio in Therapy Settings.")
+                }
             }
             if let latest = warning.latest {
                 Text("Glucose now \(formatMmolPerL(latest.value)) mmol/L\(latest.trend.arrowText.map { " \($0)" } ?? ""), \(latest.trend.label).")
@@ -40,13 +47,14 @@ public struct StackingWarningView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func withDoseLine(_ effect: Double) -> String {
-        let lead = "With this \(formatUnits(doseUnits)) u: about \(formatMmolPerL(effect)) mmol/L"
-        guard let latest = warning.latest, let after = warning.glucoseAfterDose else { return lead + "." }
+    private func withDoseLine(_ insulin: Double) -> String {
+        let lead = "With this \(formatUnits(doseUnits)) u: insulin −\(formatMmolPerL(insulin)) mmol/L"
+        guard let after = warning.glucoseAfterDose else { return lead + "." }
         let end = after < forecastValueRange.lowerBound
             ? "below \(formatMmolPerL(forecastValueRange.lowerBound))"
-            : "near \(formatMmolPerL(after))"
-        return lead + ", so from \(formatMmolPerL(latest.value)) glucose would end \(end) mmol/L from insulin alone."
+            : "about \(formatMmolPerL(after))"
+        let basis = warning.remainingCarbEffect == nil ? " from insulin alone" : ""
+        return lead + ", ending \(end) mmol/L\(basis)."
     }
 
     private func rounded(_ units: Double) -> Double { (units * 10).rounded() / 10 }
@@ -56,7 +64,7 @@ public struct StackingWarningView: View {
         return minutes < 90 ? "\(minutes) min" : formatHalfHours(seconds)
     }
 
-    public static let caution = "Correcting during a post-meal rise with insulin on board can stack and cause a low. Carbs still being absorbed are not counted. This is information, not a dosing instruction."
+    public static let caution = "Correcting during a post-meal rise with insulin on board can stack and cause a low. This is information, not a dosing instruction."
 
     public static func saveTitle(_ warning: StackingWarning?, base: String = "Save") -> String {
         warning == nil ? base : "\(base) Anyway"
