@@ -20,8 +20,10 @@ public struct InsulinDose: Equatable, Sendable, Codable, Identifiable {
     public let deviceName: String?
     public let origin: DoseOrigin
     public let entryId: UUID?
+    /// Nil for the first Glooko Dose at its kind and time, so it keeps the id Doses had before numbering.
+    private let occurrence: Int?
 
-    public init(kind: InsulinKind, units: Double, timestamp: Date, insulinName: String?, deviceName: String?) {
+    public init(kind: InsulinKind, units: Double, timestamp: Date, insulinName: String?, deviceName: String?, occurrence: Int = 0) {
         self.kind = kind
         self.units = units
         self.timestamp = timestamp
@@ -29,6 +31,7 @@ public struct InsulinDose: Equatable, Sendable, Codable, Identifiable {
         self.deviceName = deviceName
         self.origin = .glooko
         self.entryId = nil
+        self.occurrence = occurrence > 0 ? occurrence : nil
     }
 
     public static func manual(
@@ -49,6 +52,7 @@ public struct InsulinDose: Equatable, Sendable, Codable, Identifiable {
         self.deviceName = nil
         self.origin = .manual
         self.entryId = entryId
+        self.occurrence = nil
     }
 
     /// Lines written before manual entry existed carry no origin and are Glooko Doses.
@@ -61,18 +65,35 @@ public struct InsulinDose: Equatable, Sendable, Codable, Identifiable {
         deviceName = try container.decodeIfPresent(String.self, forKey: .deviceName)
         origin = try container.decodeIfPresent(DoseOrigin.self, forKey: .origin) ?? .glooko
         entryId = try container.decodeIfPresent(UUID.self, forKey: .entryId)
+        occurrence = try container.decodeIfPresent(Int.self, forKey: .occurrence).flatMap { $0 > 0 ? $0 : nil }
     }
 
-    /// A Glooko Dose is keyed by kind and time so a re-sync replaces it; a manual one keeps its
-    /// identity across edits, and two entered in the same minute stay apart.
+    /// A Glooko Dose is keyed by kind, time and its place among Doses sharing both, so a re-sync
+    /// replaces it; a manual one keeps its identity across edits, and two entered in the same minute stay apart.
     public var id: String {
         if origin == .manual, let entryId { return "manual-\(entryId.uuidString)" }
-        return "\(kind.rawValue)-\(timestamp.timeIntervalSince1970)"
+        let key = "\(kind.rawValue)-\(timestamp.timeIntervalSince1970)"
+        return occurrence.map { "\(key)#\($0)" } ?? key
     }
 
     public var isManual: Bool { origin == .manual }
 
     public var isFromPen: Bool { deviceName != nil }
+}
+
+/// Numbers Glooko Doses that share a kind and time, ordered by their content so the same Glooko
+/// response numbers them the same way every time. Glooko carries no record id.
+func numberingSameTimeDoses(_ doses: [InsulinDose]) -> [InsulinDose] {
+    let groups = Dictionary(grouping: doses) { "\($0.kind.rawValue)-\($0.timestamp.timeIntervalSince1970)" }
+    return groups.values.flatMap { group in
+        group
+            .sorted { ($0.units, $0.deviceName ?? "", $0.insulinName ?? "") < ($1.units, $1.deviceName ?? "", $1.insulinName ?? "") }
+            .enumerated()
+            .map { index, dose in
+                InsulinDose(kind: dose.kind, units: dose.units, timestamp: dose.timestamp, insulinName: dose.insulinName, deviceName: dose.deviceName, occurrence: index)
+            }
+    }
+    .sorted { ($0.timestamp, $0.id) < ($1.timestamp, $1.id) }
 }
 
 /// A manual Dose stands in for its Pen Dose until Glooko has it: a Glooko Dose of the same kind and
