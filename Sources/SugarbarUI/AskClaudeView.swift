@@ -75,7 +75,7 @@ public struct AskClaudeView: View {
     }
 
     private var privacyNote: some View {
-        Text("A summary of your glucose, dose and meal data goes to the Claude API with your own key; nothing else leaves the device. Answers are not medical advice.")
+        Text("A summary of your glucose, dose and meal data goes to the Claude API with your own key; nothing else leaves the device.")
             .font(.caption)
             .foregroundStyle(.secondary)
     }
@@ -111,7 +111,7 @@ public struct AskClaudeView: View {
                 .accessibilityLabel("Send")
             }
             if let dataThrough = model.dataThrough {
-                Text("Using data up to \(dataThrough.formatted(date: .omitted, time: .shortened)). Not medical advice.")
+                Text("Using data up to \(dataThrough.formatted(date: .omitted, time: .shortened)).")
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
             }

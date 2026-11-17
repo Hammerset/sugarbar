@@ -51,9 +51,6 @@ struct SignInView: View {
 
             Spacer()
 
-            Text("Not a medical device — for information only.")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
         }
         .padding(24)
     }

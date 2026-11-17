@@ -178,9 +178,6 @@ struct PanelView: View {
     private var footer: some View {
         VStack(alignment: .leading, spacing: 10) {
             Divider()
-            Text("Not a medical device — for information only.")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
             Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 8) {
                 GridRow {
                     footerAction("Log Dose", systemImage: "syringe") { showsDoseEntry.toggle() }
