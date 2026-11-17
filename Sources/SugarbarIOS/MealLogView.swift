@@ -83,7 +83,7 @@ struct MealLogView: View {
                 .ignoresSafeArea()
             }
             .sheet(isPresented: $showTherapySettings, onDismiss: model.reloadSettings) {
-                TherapySettingsView(model: model)
+                NavigationStack { TherapySettingsView(model: model) }
             }
             .sheet(isPresented: $showEarlierDoseLog) {
                 DoseLogView(model: model)

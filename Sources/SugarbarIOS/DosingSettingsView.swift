@@ -14,27 +14,26 @@ struct DosingSettingsView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            Form {
-                Section {
-                    DosingSettingsFields(dosing: $dosing)
-                } footer: {
-                    Text(DosingSettingsFields.note)
-                }
+        Form {
+            Section {
+                DosingSettingsFields(dosing: $dosing)
+            } footer: {
+                Text(DosingSettingsFields.note)
             }
-            .navigationTitle("Dose Settings")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
-                        var settings = store.load()
-                        settings.dosing = dosing
-                        store.save(settings)
-                        dismiss()
-                    }
+        }
+        .navigationTitle("Dose Settings")
+        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden()
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Cancel") { dismiss() }
+            }
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Save") {
+                    var settings = store.load()
+                    settings.dosing = dosing
+                    store.save(settings)
+                    dismiss()
                 }
             }
         }

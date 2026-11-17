@@ -22,7 +22,7 @@ struct AskClaudeSheet: View {
                     }
                 }
                 .sheet(isPresented: $showClaudeKey) {
-                    ClaudeAPIKeyView(model: model)
+                    NavigationStack { ClaudeAPIKeyView(model: model) }
                 }
         }
     }
