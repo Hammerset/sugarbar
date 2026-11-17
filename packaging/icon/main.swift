@@ -4,16 +4,16 @@ import Foundation
 import UniformTypeIdentifiers
 
 // Headless render harness for the Sugarbar app icon.
-// drawicon.swift supplies `func drawIcon(_ ctx: CGContext, _ S: CGFloat)`.
+// Usage: iconrender <out.png> <size> [light|dark|tinted] [--full-bleed]
 // Coordinate system handed to drawIcon: origin top-left, y increases downward,
 // canvas is S x S points (== pixels at this render size).
 
-func makeContext(_ size: Int) -> CGContext {
+func makeContext(_ size: Int, opaque: Bool) -> CGContext {
     let cs = CGColorSpace(name: CGColorSpace.sRGB)!
     guard let ctx = CGContext(
         data: nil, width: size, height: size,
         bitsPerComponent: 8, bytesPerRow: 0, space: cs,
-        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        bitmapInfo: (opaque ? CGImageAlphaInfo.noneSkipLast : CGImageAlphaInfo.premultipliedLast).rawValue
     ) else { fatalError("could not create context") }
     return ctx
 }
@@ -31,8 +31,10 @@ func writePNG(_ ctx: CGContext, to path: String) {
 let args = CommandLine.arguments
 let outPath = args.count > 1 ? args[1] : "icon.png"
 let size = args.count > 2 ? (Int(args[2]) ?? 1024) : 1024
+let appearance = args.count > 3 ? (Appearance(rawValue: args[3]) ?? .light) : .light
+let fullBleed = args.contains("--full-bleed")
 
-let ctx = makeContext(size)
+let ctx = makeContext(size, opaque: fullBleed)
 let S = CGFloat(size)
 ctx.clear(CGRect(x: 0, y: 0, width: S, height: S))
 ctx.setAllowsAntialiasing(true)
@@ -41,5 +43,5 @@ ctx.interpolationQuality = .high
 // Flip to top-left origin (y-down) design coordinates.
 ctx.translateBy(x: 0, y: S)
 ctx.scaleBy(x: 1, y: -1)
-drawIcon(ctx, S)
+drawIcon(ctx, S, appearance: appearance, fullBleed: fullBleed)
 writePNG(ctx, to: outPath)

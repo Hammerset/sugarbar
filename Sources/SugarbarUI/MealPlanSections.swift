@@ -142,7 +142,7 @@ public struct MealPlanSections: View {
         }
     }
 
-    public static let note = "The app's calculation from your carb ratio, insulin sensitivity and target. Check every number; you decide. Not a medical device."
+    public static let note = "The app's calculation from your carb ratio, insulin sensitivity and target."
 }
 
 /// The parts of the app's calculation, or why there is none.

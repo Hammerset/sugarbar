@@ -9,7 +9,7 @@ public struct AlertSettingsRows: View {
         _settings = settings
     }
 
-    public static let footer = "Sugarbar is not a medical device. Alerts only fire when a fresh Reading arrives, so they can be late or missed if the device sleeps, goes offline or LibreLinkUp lags. Keep your sensor app's own alarms on."
+    public static let footer = "Alerts only fire when a fresh Reading arrives, so they can be late or missed if the device sleeps, goes offline or LibreLinkUp lags. Keep your sensor app's own alarms on."
 
     public var body: some View {
         Toggle("Low/high alerts", isOn: $settings.isEnabled)

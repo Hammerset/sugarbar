@@ -85,7 +85,7 @@ public func decodeGlookoHistory(_ data: Data, timeZone: TimeZone = .current) thr
     let cgm = (series?.cgmLow ?? []) + (series?.cgmNormal ?? []) + (series?.cgmHigh ?? [])
     return GlookoHistory(
         readings: cgm.compactMap { $0.reading(timeZone: timeZone) }.sorted { $0.timestamp < $1.timestamp },
-        doses: (boluses + basals).sorted { $0.timestamp < $1.timestamp }
+        doses: numberingSameTimeDoses(boluses + basals)
     )
 }
 

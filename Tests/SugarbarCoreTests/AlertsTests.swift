@@ -189,7 +189,7 @@ import Testing
         let low = conditions(value: 4.6, lowIn: 19)
         #expect(low.map(\.family) == [ForecastAlertFamily.low])
         #expect(low.first?.title == "Heading low: 4.6 ↘")
-        #expect(low.first?.body == "Predicted below 3.9 in about 20 min. Check, and consider carbs. Sugarbar is not a medical device.")
+        #expect(low.first?.body == "Predicted below 3.9 in about 20 min. Check, and consider carbs.")
         #expect(conditions(value: 4.6, lowIn: 45).isEmpty)
         #expect(conditions(value: 9, highIn: 55).map(\.family) == [ForecastAlertFamily.high])
         #expect(conditions(value: 9, highIn: 65).isEmpty)

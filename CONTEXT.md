@@ -164,7 +164,7 @@ _Avoid_: initial import, onboarding.
 
 - A **Primary** shares to one or more **Followers**; sugarbar authenticates as a **Follower**.
 - A **Reading** has exactly one **Trend** and one status (**In-Range** / **Low** / **High**) derived from the **Reference Range**. A backfilled Reading's Trend is always not-determined: Glooko does not carry one.
-- **History** holds each **Reading** once: the same sensor Reading arriving from LibreLinkUp and from **Backfill** (timestamps within 30 s) is kept as the first copy seen. A Glooko **Dose** is identified by its kind and timestamp; a later copy (e.g. units edited in Glooko) replaces the earlier one. A **Manual Dose** has its own identity, so two entered in the same minute both stay, and an edit replaces it in place.
+- **History** holds each **Reading** once: the same sensor Reading arriving from LibreLinkUp and from **Backfill** (timestamps within 30 s) is kept as the first copy seen. A Glooko **Dose** is identified by its kind, its timestamp and its place among Glooko Doses sharing both (ordered by units, so two pen Doses at the same second both stay); a later copy (e.g. units edited in Glooko) replaces the earlier one. Glooko gives no record id, so a Dose deleted in Glooko stays in History. A **Manual Dose** has its own identity, so two entered in the same minute both stay, and an edit replaces it in place.
 - A Glooko **Dose** supersedes at most one **Manual Dose** and vice versa, the closest in time first. If the units differ, both are kept. Everything that reads Doses (graph, totals, Forecast) sees them after superseding.
 - A **Reading**'s **Staleness** is independent of its value — a fresh-looking number can still be stale.
 - A **Sensor State** can exist with no current **Reading** (e.g. warm-up).
