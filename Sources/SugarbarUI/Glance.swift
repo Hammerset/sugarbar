@@ -114,10 +114,9 @@ public func attentionItems(
     }
     var alerts = settings.alerts
     alerts.isEnabled = true
-    let lowFamilies = [ForecastAlertFamily.low, ForecastAlertFamily.fallingFast]
-    for condition in forecastAlertConditions(forecast: forecast, latest: latest, now: now, thresholds: settings.thresholds, settings: alerts)
-    where lowFamilies.contains(condition.family) {
-        items.append(AttentionItem(id: condition.family, systemImage: "arrow.down.right.circle.fill", text: condition.title, tone: .warning, opensMeal: false))
+    let conditions = forecastAlertConditions(forecast: forecast, latest: latest, now: now, thresholds: settings.thresholds, settings: alerts)
+    if let low = conditions.first(where: { $0.family == ForecastAlertFamily.fallingFast }) ?? conditions.first(where: { $0.family == ForecastAlertFamily.low }) {
+        items.append(AttentionItem(id: low.family, systemImage: "arrow.down.right.circle.fill", text: low.title, tone: .warning, opensMeal: false))
     }
     for meal in activeMealPlans(meals, now: now) where isDue(meal, now: now) {
         items.append(AttentionItem(id: meal.id.uuidString, systemImage: meal.isPlanned ? "fork.knife" : "syringe", text: mealReminderLine(meal), tone: meal.isPlanned ? .neutral : .warning, opensMeal: true))
