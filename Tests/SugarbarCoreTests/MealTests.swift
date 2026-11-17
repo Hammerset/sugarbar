@@ -188,7 +188,7 @@ private func messagesResponse(text: String, stopReason: String = "end_turn") -> 
         let meal = try #require(try JSONDecoder().decode([Meal].self, from: Data(stored.utf8)).first)
         #expect(meal.isEaten)
         #expect(meal.carbsGrams == 45)
-        #expect(meal.estimatedCarbsGrams == nil && meal.fatGrams == nil && meal.plan == nil && meal.absorption == nil)
+        #expect(meal.estimatedCarbsGrams == nil && meal.fatGrams == nil && meal.plan == nil && meal.absorption == nil && meal.carbAbsorption == .normal)
 
         let planned = Meal(
             timestamp: now, carbsGrams: 60, summary: "Pizza", estimatedCarbsGrams: 62, fatGrams: 28, proteinGrams: 24,

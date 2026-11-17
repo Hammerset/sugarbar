@@ -66,7 +66,7 @@ public final class GlucoseAlerter {
         content.body = notification.body
         content.sound = .default
         content.threadIdentifier = notification.family
-        let isLow = notification.family == GlucoseAlertFamily.low || notification.family == ForecastAlertFamily.low
+        let isLow = [GlucoseAlertFamily.low, ForecastAlertFamily.low, ForecastAlertFamily.fallingFast].contains(notification.family)
         if allowsTimeSensitive, notification.isUrgent || isLow {
             content.interruptionLevel = .timeSensitive
         }

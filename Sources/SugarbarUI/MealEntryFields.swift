@@ -20,6 +20,7 @@ public struct MealDraft: Equatable {
     public var proteinGrams: Double?
     public var energyKcal: Double?
     public var absorption: AbsorptionSpeed?
+    public var carbAbsorption: CarbAbsorption
     public var plannedUnits: Double
     public var splitsDose: Bool
     public var nowUnits: Double
@@ -41,6 +42,7 @@ public struct MealDraft: Equatable {
         proteinGrams = nil
         energyKcal = nil
         absorption = nil
+        carbAbsorption = .normal
         plannedUnits = 0
         splitsDose = false
         nowUnits = 0
@@ -61,6 +63,7 @@ public struct MealDraft: Equatable {
         proteinGrams = meal.proteinGrams
         energyKcal = meal.energyKcal
         absorption = meal.absorption
+        carbAbsorption = meal.carbAbsorption
         if let plan = meal.plan {
             plannedUnits = plan.units
             takenUnits = plan.takenUnits
@@ -108,6 +111,7 @@ public struct MealDraft: Equatable {
         proteinGrams = estimate.proteinGrams
         energyKcal = estimate.energyKcal
         absorption = estimate.absorption
+        carbAbsorption = CarbAbsorption(estimate: estimate.absorption)
         if summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { summary = estimate.summary }
     }
 
@@ -176,6 +180,7 @@ public struct MealDraft: Equatable {
             proteinGrams: proteinGrams,
             energyKcal: energyKcal,
             absorption: absorption,
+            carbAbsorption: carbAbsorption,
             state: state,
             plan: plan
         )
@@ -217,6 +222,15 @@ public struct MealReviewFields: View {
                 .foregroundStyle(.secondary)
         }
         TextField("Description", text: $draft.summary)
+        Picker("Absorption", selection: $draft.carbAbsorption) {
+            ForEach(CarbAbsorption.allCases, id: \.self) { speed in
+                Text(speed.label).tag(speed)
+            }
+        }
+        .pickerStyle(.segmented)
+        Text("Slow for pasta, pizza, creamy or fatty dishes (1.5× your carb absorption time); fast for juice, sweets or white bread (half of it).")
+            .font(.footnote)
+            .foregroundStyle(.secondary)
         DatePicker(
             mode == .plan ? "Eating at" : "Time",
             selection: $draft.timestamp,

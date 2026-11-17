@@ -56,6 +56,21 @@ public struct AlertSettingsRows: View {
                     step: 5
                 )
             }
+            Toggle("Warn when falling fast", isOn: $settings.predictsFallingFast)
+            if settings.predictsFallingFast {
+                Stepper(
+                    "Projected under \(formatMmolPerL(settings.fallingFastThreshold)) mmol/L",
+                    value: $settings.fallingFastThreshold,
+                    in: AlertSettings.fallingFastThresholdRange,
+                    step: 0.1
+                )
+                Stepper(
+                    "Within \(minutes(settings.fallingFastWindow)) min",
+                    value: minutesBinding(\.fallingFastWindow),
+                    in: minutes(AlertSettings.fallingFastWindowRange.lowerBound)...minutes(AlertSettings.fallingFastWindowRange.upperBound),
+                    step: 5
+                )
+            }
             Text("Early warnings use the Forecast, so they need Therapy Settings.")
                 .font(.caption)
                 .foregroundStyle(.secondary)

@@ -45,7 +45,7 @@ A local notification that the latest live **Reading** is Low or High, raised whe
 _Avoid_: alarm (that's the Libre app's own feature, which sugarbar does not replace), warning.
 
 **Early Warning**:
-An **Alert** raised from the **Forecast** instead of the latest Reading: "heading low" when it crosses the low threshold within the low lead time (30 min by default, on once Alerts are on), "heading high" when it crosses the high threshold within the high lead time (60 min by default, opt-in). Quiet while the latest Reading is already Low (or High), since the glucose Alert covers that. Asks the user to check, and for lows to consider carbs; never names an amount. Needs **Therapy Settings**, like the Forecast.
+An **Alert** raised from the **Forecast** instead of the latest Reading: "heading low" when it crosses the low threshold within the low lead time (30 min by default, on once Alerts are on), "heading high" when it crosses the high threshold within the high lead time (60 min by default, opt-in). Quiet while the latest Reading is already Low (or High), since the glucose Alert covers that. Asks the user to check, and for lows to consider carbs; never names an amount. "Falling fast" is the third kind: the CGM trend is falling and the Forecast goes under 4.5 mmol/L (adjustable) within 20 minutes (adjustable); it only tells, it never suggests what to do. Needs **Therapy Settings**, like the Forecast.
 _Avoid_: predictive alarm, prediction alert.
 
 **Snooze**:
@@ -65,7 +65,7 @@ A connected insulin pen (NovoPen 6) whose memory is synced to the Glooko app ove
 _Avoid_: device (too generic), smart pen.
 
 **Meal**:
-Carbohydrates eaten at a point in time, in grams, with a short description, and fat, protein and energy when an Estimate gave them. Logged on the phone or the Mac from a photo, a description, or both: Claude proposes an **Estimate**, the user confirms or edits the grams, and the confirmed figure is saved next to Claude's original one. The user can also skip the Estimate and type the grams. A saved Meal can be edited or deleted. A Meal is either **eaten** or a **Meal Plan**.
+Carbohydrates eaten at a point in time, in grams, with a short description, and fat, protein and energy when an Estimate gave them. Logged on the phone or the Mac from a photo, a description, or both: Claude proposes an **Estimate**, the user confirms or edits the grams, and the confirmed figure is saved next to Claude's original one. The user can also skip the Estimate and type the grams. Each Meal has a **Carb Absorption** speed: fast (half the carb absorption time, about 1.5 h), normal (the carb absorption time, about 3 h) or slow/fatty (1.5×, about 4.5 h: pasta, pizza, creamy or fatty dishes); normal unless the user picks another, prefilled from Claude's absorption class when there is an Estimate. A saved Meal can be edited or deleted. A Meal is either **eaten** or a **Meal Plan**.
 _Avoid_: food log, entry, carbs (the number, not the event).
 
 **Meal Plan**:
@@ -125,7 +125,7 @@ The record of changes to sensitivity and carb ratio, each with its date, old and
 _Avoid_: history (that is History), audit trail.
 
 **Forecast**:
-Where glucose is predicted to head, in 5-minute points from the latest Reading until every Dose and Meal has finished acting (at least 3 hours): the summed effect of Bolus insulin, Meal carbs and recent momentum (the part of the recent slope that insulin and carbs do not explain). Carries the eventual (settled) value and the first predicted crossing of the low and high thresholds. Says where glucose is heading; how much insulin to take is the separate **Suggested Dose**. The graph draws the first 3 hours dashed past the latest Reading on the 4h, 12h and 24h Ranges.
+Where glucose is predicted to head, in 5-minute points from the latest Reading until every Dose and Meal has finished acting (at least 3 hours): the summed effect of Bolus insulin, Meal carbs (each at its own Carb Absorption speed) and recent momentum (the part of the CGM trend that insulin and carbs do not explain, at full weight at first and gone after 30 minutes). A **retrospective correction** slows the remaining carbs when glucose fell faster over the last 30 minutes than predicted, and speeds them up when it rose faster, easing back over an hour. Every point has an uncertainty range that widens with time and when trend and model disagree; past a set margin the Forecast is **uncertain** and says so. Carries the eventual (settled) value and the first predicted crossing of the low and high thresholds. Says where glucose is heading; how much insulin to take is the separate **Suggested Dose**. The graph draws the first 3 hours dashed past the latest Reading on the 4h, 12h and 24h Ranges.
 _Avoid_: prediction (fine in prose, not as a type), projection.
 
 **Insulin on Board**:
@@ -164,7 +164,7 @@ _Avoid_: initial import, onboarding.
 - A Glooko **Dose** supersedes at most one **Manual Dose** and vice versa, the closest in time first. If the units differ, both are kept. Everything that reads Doses (graph, totals, Forecast) sees them after superseding.
 - A **Reading**'s **Staleness** is independent of its value — a fresh-looking number can still be stale.
 - A **Sensor State** can exist with no current **Reading** (e.g. warm-up).
-- An **Alert** belongs to a family (low, high, heading low, heading high). Each family debounces on its own: one alert on entering, one more on escalation, then one per repeat interval; leaving the family resets it.
+- An **Alert** belongs to a family (low, high, heading low, heading high, falling fast). Each family debounces on its own: one alert on entering, one more on escalation, then one per repeat interval; leaving the family resets it.
 - A **Dose** is independent of any **Reading**; the graph overlays Doses on Readings by time only.
 - Doses are only as fresh as the last **Pen** sync — there is no Staleness notion for them.
 - A **Meal** is independent of any **Reading** or **Dose**; the graph overlays all three by time only.

@@ -64,4 +64,11 @@ import Testing
         #expect(pooledMeals.map(\.carbsGrams) == [100])
         #expect(pooledMeals.map(\.summary) == ["2 meals"])
     }
+
+    @Test func labelGroupsMergeMarkersWithinALabelWidthOfTheGroupStart() {
+        let start = Date(timeIntervalSince1970: 0)
+        let minutes: [Double] = [30, 0, 2, 9, 12, 60]
+        let groups = labelGroups(minutes, at: { start.addingTimeInterval($0 * 60) }, within: 10 * 60)
+        #expect(groups == [[0, 2, 9], [12], [30], [60]])
+    }
 }

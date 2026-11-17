@@ -342,7 +342,7 @@ private struct EpisodeFinder {
         guard !included.isEmpty else { return nil }
         let kind: EpisodeKind = clusterMeals.isEmpty ? .correction : .meal
         let carbs = clusterMeals.reduce(0) { $0 + $1.carbsGrams }
-        let carbsDone = clusterMeals.map { $0.timestamp.addingTimeInterval(therapy.carbAbsorptionTime) }.max() ?? t0
+        let carbsDone = clusterMeals.map { $0.timestamp.addingTimeInterval($0.absorptionTime(therapy)) }.max() ?? t0
 
         var end: Date
         while true {
@@ -356,7 +356,7 @@ private struct EpisodeFinder {
         }
         guard end.addingTimeInterval(endSpan) <= until else { return nil }
 
-        if meals.contains(where: { $0.timestamp < t0 && $0.timestamp >= t0.addingTimeInterval(-therapy.carbAbsorptionTime - 30 * 60) }) {
+        if meals.contains(where: { $0.timestamp < t0 && $0.timestamp >= t0.addingTimeInterval(-$0.absorptionTime(therapy) - 30 * 60) }) {
             return .failure(.carbsOnBoard)
         }
         let units = included.reduce(0) { $0 + $1.units }
@@ -402,7 +402,7 @@ private struct EpisodeFinder {
                 $0 + $1.units * (model.remainingFraction(after: t0.timeIntervalSince($1.timestamp)) - model.remainingFraction(after: end.timeIntervalSince($1.timestamp)))
             }
         let absorbed = clusterMeals.reduce(0) {
-            $0 + $1.carbsGrams * min(max(end.timeIntervalSince($1.timestamp) / therapy.carbAbsorptionTime, 0), 1)
+            $0 + $1.carbsGrams * min(max(end.timeIntervalSince($1.timestamp) / $1.absorptionTime(therapy), 0), 1)
         }
         return .success(RawEpisode(
             kind: kind,
