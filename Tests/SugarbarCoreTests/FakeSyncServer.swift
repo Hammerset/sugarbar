@@ -31,6 +31,7 @@ final class FakeSyncServer: HTTPTransport, @unchecked Sendable {
 
     var recordCount: Int { lock.withLock { records.count } }
     var storedReadings: [WireReading] { lock.withLock { readings } }
+    var storedDoses: [WireDose] { lock.withLock { Array(doses.values) } }
 
     func send(_ request: URLRequest) async throws -> HTTPResponse {
         let (response, lose): (HTTPResponse, Bool) = try lock.withLock {
