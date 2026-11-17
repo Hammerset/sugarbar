@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# Render the Sugarbar app icon at every iconset size and assemble packaging/AppIcon.icns.
-# Run from anywhere: packaging/icon/build-icns.sh
+# Render the Sugarbar app icon: packaging/AppIcon.icns for macOS and the iOS AppIcon set
+# (light, dark and tinted appearances). Run from anywhere: packaging/icon/build-icons.sh
 set -euo pipefail
 cd "$(dirname "$0")"
 
 OUT="../AppIcon.icns"
+IOS="../../Sources/SugarbarIOS/Assets.xcassets/AppIcon.appiconset"
 BIN="$(mktemp -d)/iconrender"
 swiftc -O main.swift helpers.swift drawicon.swift -o "$BIN"
 
@@ -24,3 +25,8 @@ mkdir -p "$ICONSET"
 
 iconutil -c icns "$ICONSET" -o "$OUT"
 echo "OK: $(cd "$(dirname "$OUT")" && pwd)/$(basename "$OUT")"
+
+"$BIN" "$IOS/AppIcon.png"        1024 light  --full-bleed
+"$BIN" "$IOS/AppIcon-dark.png"   1024 dark   --full-bleed
+"$BIN" "$IOS/AppIcon-tinted.png" 1024 tinted --full-bleed
+echo "OK: $(cd "$IOS" && pwd)"
