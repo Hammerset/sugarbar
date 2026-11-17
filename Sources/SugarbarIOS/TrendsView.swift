@@ -76,10 +76,6 @@ struct TrendsView: View {
                     .buttonStyle(.bordered)
                     .frame(maxWidth: .infinity, alignment: .center)
 
-                    Text("Not a medical device — for information only.")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                        .frame(maxWidth: .infinity, alignment: .center)
 
                     HStack(spacing: 24) {
                         Button("Therapy Settings") { showTherapySettings = true }

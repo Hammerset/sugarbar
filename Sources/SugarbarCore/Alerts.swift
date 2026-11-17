@@ -276,7 +276,7 @@ public func glucoseAlertConditions(
         repeatInterval: level.isLow ? settings.lowRepeatInterval : settings.highRepeatInterval,
         title: "\(level.label): \(reading)",
         repeatTitle: "Still \(level.isUrgent ? "urgent \(direction)" : direction): \(reading)",
-        body: "\(valueText) mmol/L, Reading \(formatAge(latest.age(at: now))). Check with your sensor app or meter. Sugarbar is not a medical device.",
+        body: "\(valueText) mmol/L, Reading \(formatAge(latest.age(at: now))). Check with your sensor app or meter.",
         isUrgent: level.isUrgent
     )]
 }
@@ -322,7 +322,7 @@ public func forecastAlertConditions(
             repeatInterval: settings.lowRepeatInterval,
             title: "Heading low: \(reading)",
             repeatTitle: "Still heading low: \(reading)",
-            body: "Predicted below \(formatMmolPerL(thresholds.low)) in about \(minutes) min. Check, and consider carbs. Sugarbar is not a medical device.",
+            body: "Predicted below \(formatMmolPerL(thresholds.low)) in about \(minutes) min. Check, and consider carbs.",
             isUrgent: false
         ))
     }
@@ -337,7 +337,7 @@ public func forecastAlertConditions(
             repeatInterval: settings.lowRepeatInterval,
             title: "Falling fast: projected under \(threshold) within \(Int(settings.fallingFastWindow / 60)) min",
             repeatTitle: "Still falling fast: \(reading)",
-            body: "\(reading) now, changing \(String(format: "%.2f", rate)) mmol/L per min. Check with your sensor app or meter. Sugarbar is not a medical device.",
+            body: "\(reading) now, changing \(String(format: "%.2f", rate)) mmol/L per min. Check with your sensor app or meter.",
             isUrgent: false
         ))
     }
@@ -349,7 +349,7 @@ public func forecastAlertConditions(
             repeatInterval: settings.highRepeatInterval,
             title: "Heading high: \(reading)",
             repeatTitle: "Still heading high: \(reading)",
-            body: "Predicted above \(formatMmolPerL(thresholds.high)) in about \(minutes) min. Check. Sugarbar is not a medical device.",
+            body: "Predicted above \(formatMmolPerL(thresholds.high)) in about \(minutes) min. Check.",
             isUrgent: false
         ))
     }

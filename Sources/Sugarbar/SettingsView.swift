@@ -201,9 +201,6 @@ struct SettingsView: View {
                         .foregroundStyle(.green)
                 }
             }
-            Text("Not a medical device — for information only.")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
         }
     }
 

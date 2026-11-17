@@ -64,7 +64,7 @@ public struct StackingWarningView: View {
         return minutes < 90 ? "\(minutes) min" : formatHalfHours(seconds)
     }
 
-    public static let caution = "Correcting during a post-meal rise with insulin on board can stack and cause a low. This is information, not a dosing instruction."
+    public static let caution = "Correcting during a post-meal rise with insulin on board can stack and cause a low."
 
     public static func saveTitle(_ warning: StackingWarning?, base: String = "Save") -> String {
         warning == nil ? base : "\(base) Anyway"

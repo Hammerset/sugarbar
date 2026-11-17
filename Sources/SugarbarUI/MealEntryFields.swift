@@ -239,7 +239,7 @@ public struct MealReviewFields: View {
         )
     }
 
-    public static let note = "Claude's Estimate is a starting point — check the grams before saving. Not a medical device."
+    public static let note = "Claude's Estimate is a starting point — check the grams before saving."
 }
 
 public struct MealEstimateDetails: View {

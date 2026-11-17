@@ -29,5 +29,5 @@ public struct DosingSettingsFields: View {
         }
     }
 
-    public static let note = "Used by Plan Meal: carbs ÷ carb ratio plus a correction to the target ÷ insulin sensitivity, minus Insulin on Board, rounded down to the pen step and never above the maximum. A calculation for you to check, not a medical device. Logging a bolus above that insulin on board, or that soon after the previous bolus, shows a stacking warning before saving."
+    public static let note = "Used by Plan Meal: carbs ÷ carb ratio plus a correction to the target ÷ insulin sensitivity, minus Insulin on Board, rounded down to the pen step and never above the maximum. Logging a bolus above that insulin on board, or that soon after the previous bolus, shows a stacking warning before saving."
 }
