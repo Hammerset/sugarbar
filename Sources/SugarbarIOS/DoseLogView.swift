@@ -22,8 +22,6 @@ struct DoseLogView: View {
             Form {
                 Section {
                     DoseEntryFields(draft: $draft, defaultName: model.defaultInsulinName(for: draft.kind))
-                } footer: {
-                    Text(DoseEntryFields.note)
                 }
                 if let warning {
                     Section {
@@ -50,7 +48,7 @@ struct DoseLogView: View {
     private var recentSection: some View {
         let recent = model.recentManualDoses
         if !recent.isEmpty {
-            Section("Entered, not yet from Glooko") {
+            Section {
                 ForEach(recent) { dose in
                     Button {
                         draft = DoseDraft(editing: dose)
@@ -65,6 +63,10 @@ struct DoseLogView: View {
                         if dose.id == draft.editing?.id { draft = DoseDraft() }
                     }
                 }
+            } header: {
+                Text("Entered, not yet from Glooko")
+            } footer: {
+                Text(DoseEntryFields.note)
             }
         }
     }

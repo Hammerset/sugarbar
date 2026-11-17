@@ -16,6 +16,7 @@ struct PanelView: View {
     @State private var window: HistoryWindow = .fourHours
     @State private var selectedDate: Date?
     @State private var showsDoseEntry = false
+    @AppStorage("panel.showsDetails") private var showsDetails = false
     @State private var headerHeight: CGFloat = 0
     @State private var contentHeight: CGFloat = 0
     @State private var footerHeight: CGFloat = 0
@@ -54,14 +55,16 @@ struct PanelView: View {
 
     private var content: some View {
         VStack(alignment: .leading, spacing: 12) {
-            OnBoardSummary(forecast: model.forecast, therapyComplete: model.settings.therapy.isComplete)
+            if !attention.isEmpty {
+                AttentionList(items: attention, onOpenMeal: onPlanMeal)
+                    .font(.callout)
+            }
+            chart
+            RangeSelector(selection: $window)
+            ForecastCaption(forecast: model.forecast, therapyComplete: model.settings.therapy.isComplete)
                 .font(.caption)
                 .fixedSize(horizontal: false, vertical: true)
-            chart
-            insulinTotalsLine
-            rangePicker
-            TimeInRangeView(summary: timeInRange(series, thresholds: thresholds))
-            contextualRows
+            details
             if showsDoseEntry {
                 Divider()
                 DoseEntrySection(model: model, isPresented: $showsDoseEntry)
@@ -71,76 +74,74 @@ struct PanelView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    @ViewBuilder
-    private var contextualRows: some View {
-        ForEach(model.therapySuggestions, id: \.quantity) { suggestion in
-            TherapySuggestionRow(
-                suggestion: suggestion,
-                onAccept: { model.acceptSuggestion(suggestion) },
-                onDismiss: { model.dismissSuggestion(suggestion) }
-            )
-            .font(.caption)
-        }
-        ForEach(activeMealPlans(model.meals, now: model.now)) { meal in
-            Button(action: onPlanMeal) {
-                Text(mealSummaryLine(meal))
-                    .multilineTextAlignment(.leading)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .contentShape(Rectangle())
+    private var attention: [AttentionItem] {
+        attentionItems(
+            content: model.content,
+            statusMessage: model.statusMessage,
+            forecast: model.forecast,
+            latest: model.latest,
+            settings: model.settings,
+            meals: model.meals,
+            now: model.now,
+            syncErrors: model.insulinSyncError.map { ["Glooko: \($0)"] } ?? []
+        )
+    }
+
+    private var details: some View {
+        let upcoming = upcomingMealPlans(model.meals, now: model.now)
+        let suggestions = model.therapySuggestions
+        return VStack(alignment: .leading, spacing: 12) {
+            Button {
+                withAnimation(.snappy(duration: 0.2)) { showsDetails.toggle() }
+            } label: {
+                HStack(spacing: 6) {
+                    Text(glanceDetailsSummary(
+                        readings: series,
+                        thresholds: thresholds,
+                        windowLabel: window.label,
+                        suggestionCount: suggestions.count,
+                        upcomingMealCount: upcoming.count
+                    ))
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.down")
+                        .font(.caption.weight(.semibold))
+                        .rotationEffect(.degrees(showsDetails ? 0 : -90))
+                }
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .font(.caption)
-            .foregroundStyle(meal.isPlanned ? Color.secondary : Color.orange)
-        }
-        if let error = model.insulinSyncError {
-            Text("Glooko: \(error)")
-                .font(.caption)
-                .foregroundStyle(.orange)
-                .fixedSize(horizontal: false, vertical: true)
+            if showsDetails {
+                GlanceDetails(
+                    windowLabel: window.label,
+                    readings: series,
+                    doses: model.chartDoses(window: window),
+                    meals: model.chartMeals(window: window),
+                    upcomingMeals: upcoming,
+                    thresholds: thresholds,
+                    showsInsulin: model.glookoAccountEmail != nil || !model.chartDoses(window: window).isEmpty,
+                    suggestions: suggestions,
+                    onAccept: model.acceptSuggestion,
+                    onDismiss: model.dismissSuggestion,
+                    onOpenMeal: onPlanMeal
+                )
+                .font(.callout)
+            }
         }
     }
 
     private var header: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            HStack(alignment: .center, spacing: 8) {
-                headerValue
-                if let symbol = model.content.trendSymbol {
-                    Image(systemName: symbol)
-                        .font(.system(size: 26, weight: .semibold))
-                        .foregroundStyle(valueTint)
-                }
-            }
+        HStack(alignment: .center, spacing: 8) {
+            GlucoseReadout(content: model.content, size: 44)
             Spacer()
-            VStack(alignment: .trailing, spacing: 2) {
-                if let latest = model.latest {
-                    TimelineView(.periodic(from: .now, by: 1)) { context in
-                        Text(formatAge(latest.age(at: context.date)))
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                if let state = stateLine {
-                    Text(state)
-                        .font(.caption)
-                        .foregroundStyle(stateIsWarning ? .orange : .secondary)
-                        .multilineTextAlignment(.trailing)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+            VStack(alignment: .trailing, spacing: 3) {
+                ReadingAge(latest: model.latest)
+                    .font(.callout)
+                OnBoardLine(forecast: model.forecast)
+                    .font(.caption)
             }
-        }
-    }
-
-    @ViewBuilder
-    private var headerValue: some View {
-        if let text = model.content.text {
-            Text(text)
-                .font(.system(size: 44, weight: .semibold, design: .rounded))
-                .foregroundStyle(valueTint)
-        } else if let glyph = model.content.glyph {
-            Image(systemName: glyph)
-                .font(.system(size: 34, weight: .semibold))
-                .foregroundStyle(valueTint)
+            .foregroundStyle(.secondary)
         }
     }
 
@@ -152,98 +153,39 @@ struct PanelView: View {
             forecast: model.chartForecast(window: window),
             thresholds: thresholds,
             latest: model.latest,
-            valueTint: valueTint,
+            valueTint: model.content.tint,
             xDomain: window.interval(endingAt: model.now),
             markerBucket: window.markerBucket,
             selectedDate: $selectedDate
         )
     }
 
-    @ViewBuilder
-    private var insulinTotalsLine: some View {
-        let doses = model.chartDoses(window: window)
-        if model.glookoAccountEmail != nil || !doses.isEmpty {
-            let totals = insulinTotals(doses)
-            Text("Insulin \(window.label) · bolus \(formatUnits(totals.bolus)) u · basal \(formatUnits(totals.basal)) u")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-    }
-
-    private var rangePicker: some View {
-        RangeSelector(selection: $window)
-    }
-
     private var footer: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(spacing: 12) {
             Divider()
-            Text("Not a medical device — for information only.")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
-            Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 8) {
-                GridRow {
-                    footerAction("Log Dose", systemImage: "syringe") { showsDoseEntry.toggle() }
-                    footerAction("Log Meal", systemImage: "fork.knife", action: onLogMeal)
-                }
-                GridRow {
-                    footerAction("Plan Meal", systemImage: "list.bullet.clipboard", action: onPlanMeal)
-                    footerAction("Ask Claude", systemImage: "bubble.left.and.text.bubble.right", action: onAskClaude)
-                }
-            }
-            .buttonStyle(.borderless)
-            HStack {
-                Button(action: onOpenSettings) {
+            HStack(spacing: 6) {
+                QuickActionBar([
+                    .logDose { showsDoseEntry.toggle() },
+                    .logMeal(onLogMeal),
+                    .planMeal(onPlanMeal),
+                    .askClaude(onAskClaude),
+                ])
+                Menu {
+                    Button("Settings…", action: onOpenSettings)
+                    Divider()
+                    Button("Quit Sugarbar") { NSApplication.shared.terminate(nil) }
+                } label: {
                     Image(systemName: "gearshape")
-                        .font(.body)
+                        .font(.system(size: 15))
                 }
-                .buttonStyle(.borderless)
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
                 .help("Settings")
                 .accessibilityLabel("Settings")
-                Spacer()
-                Button("Quit") { NSApplication.shared.terminate(nil) }
             }
         }
         .padding([.horizontal, .bottom], Self.padding)
-    }
-
-    private func footerAction(_ title: String, systemImage: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Label {
-                Text(title)
-            } icon: {
-                Image(systemName: systemImage).frame(width: 20)
-            }
-        }
-        .lineLimit(1)
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var valueTint: Color { model.content.tint }
-
-    private var stateIsWarning: Bool {
-        if model.statusMessage != nil { return true }
-        if case .stale = model.content { return true }
-        return false
-    }
-
-    private var stateLine: String? {
-        if let message = model.statusMessage { return message }
-        switch model.content {
-        case let .warmingUp(remaining):
-            let minutes = max(1, Int(ceil(remaining / 60)))
-            return "Sensor warming up — ready in \(minutes) min"
-        case .stale:
-            return "No Recent Data"
-        case .empty:
-            return "Waiting for data"
-        case let .live(_, _, _, outOfRange):
-            switch outOfRange {
-            case .low: return "Below sensor range"
-            case .high: return "Above sensor range"
-            case nil: return nil
-            }
-        }
     }
 }
 

@@ -14,10 +14,6 @@ struct DoseEntrySection: View {
             Form {
                 DoseEntryFields(draft: $draft, defaultName: model.defaultInsulinName(for: draft.kind))
             }
-            Text(DoseEntryFields.note)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
             let warning = model.stackingWarning(for: draft)
             if let warning {
                 StackingWarningView(warning: warning, doseUnits: draft.units, doseTime: draft.timestamp)
@@ -41,6 +37,7 @@ struct DoseEntrySection: View {
             Text("Entered, not yet from Glooko")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                .help(DoseEntryFields.note)
             ForEach(recent) { dose in
                 HStack {
                     Text(manualDoseSummary(dose))

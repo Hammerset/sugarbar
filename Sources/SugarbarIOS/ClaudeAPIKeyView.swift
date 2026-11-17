@@ -8,30 +8,29 @@ struct ClaudeAPIKeyView: View {
     @State private var apiKey = ""
 
     var body: some View {
-        NavigationStack {
-            Form {
-                Section {
-                    SecureField("API key (sk-ant-…)", text: $apiKey)
-                        .textContentType(.password)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                } footer: {
-                    Text("A pay-per-use key from console.anthropic.com. Meal photos and descriptions are sent to Claude to estimate carbohydrates, and Ask Claude sends a summary of your glucose, dose and meal data; the key is stored in the Keychain on this phone only.")
-                }
+        Form {
+            Section {
+                SecureField("API key (sk-ant-…)", text: $apiKey)
+                    .textContentType(.password)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+            } footer: {
+                Text("A pay-per-use key from console.anthropic.com. Meal photos and descriptions are sent to Claude to estimate carbohydrates, and Ask Claude sends a summary of your glucose, dose and meal data; the key is stored in the Keychain on this phone only.")
             }
-            .navigationTitle("Claude API Key")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+        }
+        .navigationTitle("Claude API Key")
+        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden()
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Cancel") { dismiss() }
+            }
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Save") {
+                    model.saveClaudeAPIKey(apiKey.trimmingCharacters(in: .whitespacesAndNewlines))
+                    dismiss()
                 }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
-                        model.saveClaudeAPIKey(apiKey.trimmingCharacters(in: .whitespacesAndNewlines))
-                        dismiss()
-                    }
-                    .disabled(apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
+                .disabled(apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
     }

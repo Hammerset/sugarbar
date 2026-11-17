@@ -7,15 +7,10 @@ struct TrendsView: View {
 
     @State private var window: HistoryWindow = .fourHours
     @State private var selectedDate: Date?
-    @State private var showGlookoSignIn = false
     @State private var showMealLog = false
     @State private var mealLogMode: MealEntryMode = .log
-    @State private var showDosingSettings = false
     @State private var showDoseLog = false
-    @State private var showClaudeKey = false
-    @State private var showAlerts = false
-    @State private var showTherapySettings = false
-    @State private var showSync = false
+    @State private var showSettings = false
     @State private var askClaude: AskClaudeModel?
     @State private var showAskClaude = false
 
@@ -25,33 +20,12 @@ struct TrendsView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    valueDisplay
-                        .frame(maxWidth: .infinity, alignment: .center)
-
-                    OnBoardSummary(forecast: model.forecast, therapyComplete: model.settings.therapy.isComplete)
-                        .font(.footnote)
-                        .frame(maxWidth: .infinity, alignment: .center)
-
-                    ForEach(model.therapySuggestions, id: \.quantity) { suggestion in
-                        TherapySuggestionRow(
-                            suggestion: suggestion,
-                            onAccept: { model.acceptSuggestion(suggestion) },
-                            onDismiss: { model.dismissSuggestion(suggestion) }
-                        )
-                        .font(.footnote)
-                        .padding(12)
-                        .background(.yellow.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
-                    }
-
-                    if let stateLine {
-                        Text(stateLine)
+                VStack(alignment: .leading, spacing: 16) {
+                    header
+                    if !attention.isEmpty {
+                        AttentionList(items: attention) { openMealLog(.plan) }
                             .font(.subheadline)
-                            .foregroundStyle(stateIsWarning ? .orange : .secondary)
-                            .multilineTextAlignment(.center)
-                            .frame(maxWidth: .infinity, alignment: .center)
                     }
-
                     GlucoseHistoryChart(
                         series: series,
                         doses: model.chartDoses(window: window),
@@ -65,66 +39,51 @@ struct TrendsView: View {
                         selectedDate: $selectedDate
                     )
                     windowPicker
-                    timeInRangeCard
-                    insulinCard
-                    mealsCard
-
-                    Button("Ask Claude", systemImage: "bubble.left.and.text.bubble.right") {
-                        askClaude = askClaude ?? model.makeAskClaudeModel()
-                        showAskClaude = true
-                    }
-                    .buttonStyle(.bordered)
-                    .frame(maxWidth: .infinity, alignment: .center)
-
-                    Text("Not a medical device — for information only.")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                        .frame(maxWidth: .infinity, alignment: .center)
-
-                    HStack(spacing: 24) {
-                        Button("Therapy Settings") { showTherapySettings = true }
-                        Button("Dose Settings") { showDosingSettings = true }
-                        Button("Sync") { showSync = true }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .center)
-
-                    Button("Sign Out", role: .destructive) {
-                        model.signOut()
-                    }
-                    .frame(maxWidth: .infinity, alignment: .center)
+                    ForecastCaption(forecast: model.forecast, therapyComplete: model.settings.therapy.isComplete)
+                        .font(.footnote)
+                    QuickActionBar([
+                        .logDose { showDoseLog = true },
+                        .logMeal { openMealLog(.log) },
+                        .planMeal { openMealLog(.plan) },
+                        .askClaude {
+                            askClaude = askClaude ?? model.makeAskClaudeModel()
+                            showAskClaude = true
+                        },
+                    ])
+                    GlanceDetails(
+                        windowLabel: window.label,
+                        readings: series,
+                        doses: model.chartDoses(window: window),
+                        meals: model.chartMeals(window: window),
+                        upcomingMeals: upcomingMealPlans(model.meals, now: model.now),
+                        thresholds: thresholds,
+                        showsInsulin: model.isGlookoSignedIn || !model.chartDoses(window: window).isEmpty,
+                        suggestions: model.therapySuggestions,
+                        onAccept: model.acceptSuggestion,
+                        onDismiss: model.dismissSuggestion,
+                        onOpenMeal: { openMealLog(.plan) }
+                    )
+                    .font(.subheadline)
+                    .padding(16)
+                    .background(GlanceStyle.cardFill, in: RoundedRectangle(cornerRadius: 16))
                 }
                 .padding(20)
             }
-            .navigationTitle("Trends")
+            .navigationTitle("Sugarbar")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
-                    Button("Alerts", systemImage: "bell") { showAlerts = true }
+                    Button("Settings", systemImage: "gearshape") { showSettings = true }
                 }
             }
-            .sheet(isPresented: $showAlerts, onDismiss: model.reloadSettings) {
-                AlertSettingsView()
-            }
-            .sheet(isPresented: $showGlookoSignIn) {
-                GlookoSignInView(model: model)
+            .sheet(isPresented: $showSettings, onDismiss: model.reloadSettings) {
+                SettingsScreen(model: model)
             }
             .sheet(isPresented: $showDoseLog) {
                 DoseLogView(model: model)
             }
             .sheet(isPresented: $showMealLog) {
                 MealLogView(model: model, mode: mealLogMode)
-            }
-            .sheet(isPresented: $showDosingSettings, onDismiss: model.reloadSettings) {
-                DosingSettingsView()
-            }
-            .sheet(isPresented: $showClaudeKey) {
-                ClaudeAPIKeyView(model: model)
-            }
-            .sheet(isPresented: $showTherapySettings, onDismiss: model.reloadSettings) {
-                TherapySettingsView(model: model)
-            }
-            .sheet(isPresented: $showSync) {
-                SyncSettingsView(model: model)
             }
             .sheet(isPresented: $showAskClaude) {
                 if let askClaude {
@@ -134,57 +93,38 @@ struct TrendsView: View {
         }
     }
 
-    @ViewBuilder
-    private var valueDisplay: some View {
-        HStack(alignment: .center, spacing: 12) {
-            if let text = model.content.text {
-                Text(text)
-                    .font(.system(size: 56, weight: .semibold, design: .rounded))
-                    .foregroundStyle(model.content.tint)
-            } else if let glyph = model.content.glyph {
-                Image(systemName: glyph)
-                    .font(.system(size: 44, weight: .semibold))
-                    .foregroundStyle(model.content.tint)
-            }
-            if let symbol = model.content.trendSymbol {
-                Image(systemName: symbol)
-                    .font(.system(size: 32, weight: .semibold))
-                    .foregroundStyle(model.content.tint)
-            }
-            if let latest = model.latest {
-                TimelineView(.periodic(from: .now, by: 1)) { context in
-                    Text(formatAge(latest.age(at: context.date)))
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
+    private var header: some View {
+        VStack(spacing: 4) {
+            GlucoseReadout(content: model.content, size: 56)
+            HStack(spacing: 6) {
+                ReadingAge(latest: model.latest)
+                if model.forecast.map({ $0.insulinOnBoard >= 0.05 || $0.carbsOnBoard >= 0.5 }) == true {
+                    Text("·")
+                    OnBoardLine(forecast: model.forecast)
                 }
-                .padding(.leading, 8)
             }
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
         }
+        .frame(maxWidth: .infinity)
     }
 
-    private var stateIsWarning: Bool {
-        if model.statusMessage != nil { return true }
-        if case .stale = model.content { return true }
-        return false
+    private var attention: [AttentionItem] {
+        attentionItems(
+            content: model.content,
+            statusMessage: model.statusMessage,
+            forecast: model.forecast,
+            latest: model.latest,
+            settings: model.settings,
+            meals: model.meals,
+            now: model.now,
+            syncErrors: [model.insulinSyncError.map { "Glooko: \($0)" }, model.healthKitError].compactMap { $0 }
+        )
     }
 
-    private var stateLine: String? {
-        if let message = model.statusMessage { return message }
-        switch model.content {
-        case let .warmingUp(remaining):
-            let minutes = max(1, Int(ceil(remaining / 60)))
-            return "Sensor warming up — ready in \(minutes) min"
-        case .stale:
-            return "No Recent Data"
-        case .empty:
-            return "Waiting for data"
-        case let .live(_, _, _, outOfRange):
-            switch outOfRange {
-            case .low: return "Below sensor range"
-            case .high: return "Above sensor range"
-            case nil: return nil
-            }
-        }
+    private func openMealLog(_ mode: MealEntryMode) {
+        mealLogMode = mode
+        showMealLog = true
     }
 
     private var windowPicker: some View {
@@ -195,112 +135,5 @@ struct TrendsView: View {
         }
         .pickerStyle(.segmented)
         .labelsHidden()
-    }
-
-    @ViewBuilder
-    private var timeInRangeCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Time in Range · \(window.label)")
-                .font(.headline)
-            TimeInRangeView(summary: timeInRange(series, thresholds: thresholds))
-        }
-    }
-
-    @ViewBuilder
-    private var insulinCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("Insulin")
-                    .font(.headline)
-                Spacer()
-                Button("Log Dose", systemImage: "syringe") { showDoseLog = true }
-                    .buttonStyle(.bordered)
-            }
-            if model.isGlookoSignedIn || !model.chartDoses(window: window).isEmpty {
-                insulinTotalsRow
-            }
-            if model.isGlookoSignedIn {
-                if let error = model.insulinSyncError {
-                    Text(error)
-                        .font(.footnote)
-                        .foregroundStyle(.orange)
-                }
-                Button("Disconnect Glooko", role: .destructive) {
-                    model.signOutGlooko()
-                }
-                .font(.footnote)
-            } else {
-                Text("Connect your Glooko account to see pen and logged doses on the graph.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                Button("Connect Glooko") { showGlookoSignIn = true }
-                    .buttonStyle(.bordered)
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var mealsCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("Meals")
-                    .font(.headline)
-                Spacer()
-                Button("Plan", systemImage: "list.bullet.clipboard") { openMealLog(.plan) }
-                    .buttonStyle(.bordered)
-                Button("Log Meal", systemImage: "fork.knife") { openMealLog(.log) }
-                    .buttonStyle(.bordered)
-            }
-            Text("\(formatGrams(carbTotal(model.chartMeals(window: window)))) g carbs logged in the last \(window.label)")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-            ForEach(activeMealPlans(model.meals, now: model.now)) { meal in
-                Text(mealSummaryLine(meal))
-                    .font(.footnote)
-                    .foregroundStyle(meal.isPlanned ? Color.secondary : Color.orange)
-            }
-            if let error = model.healthKitError {
-                Text(error)
-                    .font(.footnote)
-                    .foregroundStyle(.orange)
-            }
-            if model.hasClaudeAPIKey {
-                Button("Remove Claude API Key", role: .destructive) {
-                    model.clearClaudeAPIKey()
-                }
-                .font(.footnote)
-            } else {
-                Text("Add a Claude API key to get carb Estimates from a photo or description. Claude estimates the carbs, you confirm them, and the meal is saved to Apple Health.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                Button("Add Claude API Key") { showClaudeKey = true }
-                    .buttonStyle(.bordered)
-            }
-        }
-    }
-
-    private func openMealLog(_ mode: MealEntryMode) {
-        mealLogMode = mode
-        showMealLog = true
-    }
-
-    private var insulinTotalsRow: some View {
-        let totals = insulinTotals(model.chartDoses(window: window))
-        return HStack(spacing: 0) {
-            insulinStat(label: "Bolus", units: totals.bolus, tint: InsulinKind.bolus.tint)
-            insulinStat(label: "Basal", units: totals.basal, tint: InsulinKind.basal.tint)
-        }
-    }
-
-    private func insulinStat(label: String, units: Double, tint: Color) -> some View {
-        VStack(spacing: 4) {
-            Text("\(formatUnits(units)) u")
-                .font(.title2.bold())
-                .foregroundStyle(tint)
-            Text(label)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity)
     }
 }

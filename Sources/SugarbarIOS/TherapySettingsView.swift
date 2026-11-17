@@ -14,62 +14,61 @@ struct TherapySettingsView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            Form {
-                if !model.therapySuggestions.isEmpty {
-                    Section {
-                        ForEach(model.therapySuggestions, id: \.quantity) { suggestion in
-                            TherapySuggestionRow(
-                                suggestion: suggestion,
-                                onAccept: {
-                                    model.acceptSuggestion(suggestion)
-                                    therapy[suggestion.quantity] = suggestion.suggested
-                                },
-                                onDismiss: { model.dismissSuggestion(suggestion) }
-                            )
-                        }
-                    }
-                }
+        Form {
+            if !model.therapySuggestions.isEmpty {
                 Section {
-                    TherapySettingsFields(therapy: $therapy)
-                } footer: {
-                    VStack(alignment: .leading, spacing: 8) {
-                        if let error = therapy.validationError {
-                            Text(error).foregroundStyle(.red)
-                        }
-                        Text(TherapySettingsFields.note)
+                    ForEach(model.therapySuggestions, id: \.quantity) { suggestion in
+                        TherapySuggestionRow(
+                            suggestion: suggestion,
+                            onAccept: {
+                                model.acceptSuggestion(suggestion)
+                                therapy[suggestion.quantity] = suggestion.suggested
+                            },
+                            onDismiss: { model.dismissSuggestion(suggestion) }
+                        )
                     }
-                }
-                Section {
-                    TherapyEstimateRows(
-                        estimate: model.therapyEstimate,
-                        therapy: model.settings.therapy,
-                        isEstimating: model.isEstimatingTherapy,
-                        onEstimate: model.recomputeTherapyEstimate
-                    )
-                } header: {
-                    Text("Learned from History")
-                } footer: {
-                    Text(TherapyEstimateRows.note)
-                }
-                Section("Therapy Changes") {
-                    TherapyChangeLogRows(changes: model.settings.therapyLearning.changes)
                 }
             }
-            .navigationTitle("Therapy Settings")
-            .navigationBarTitleDisplayMode(.inline)
-            .task { model.refreshTherapyEstimateIfDue() }
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
-                        model.saveTherapy(therapy)
-                        dismiss()
+            Section {
+                TherapySettingsFields(therapy: $therapy)
+            } footer: {
+                VStack(alignment: .leading, spacing: 8) {
+                    if let error = therapy.validationError {
+                        Text(error).foregroundStyle(.red)
                     }
-                    .disabled(!therapy.isValid)
+                    Text(TherapySettingsFields.note)
                 }
+            }
+            Section {
+                TherapyEstimateRows(
+                    estimate: model.therapyEstimate,
+                    therapy: model.settings.therapy,
+                    isEstimating: model.isEstimatingTherapy,
+                    onEstimate: model.recomputeTherapyEstimate
+                )
+            } header: {
+                Text("Learned from History")
+            } footer: {
+                Text(TherapyEstimateRows.note)
+            }
+            Section("Therapy Changes") {
+                TherapyChangeLogRows(changes: model.settings.therapyLearning.changes)
+            }
+        }
+        .navigationTitle("Therapy Settings")
+        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden()
+        .task { model.refreshTherapyEstimateIfDue() }
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Cancel") { dismiss() }
+            }
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Save") {
+                    model.saveTherapy(therapy)
+                    dismiss()
+                }
+                .disabled(!therapy.isValid)
             }
         }
     }
