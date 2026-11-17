@@ -150,6 +150,20 @@ final class GlucoseViewModel {
         return historyStore.latestInsulinName(kind: kind, now: Date())
     }
 
+    func stackingWarning(for draft: DoseDraft) -> StackingWarning? {
+        _ = historyRevision
+        guard draft.editing == nil else { return nil }
+        return stackingWarningFromHistory(
+            historyStore,
+            units: draft.units,
+            kind: draft.kind,
+            timestamp: draft.timestamp,
+            latest: latest,
+            settings: settings,
+            now: Date()
+        )
+    }
+
     func saveManualDose(_ dose: InsulinDose, replacing old: InsulinDose?) {
         if let old { historyStore.replace(old, with: dose) } else { historyStore.append(doses: [dose]) }
         now = Date()

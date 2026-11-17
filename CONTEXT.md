@@ -77,8 +77,12 @@ The app's calculation of a Bolus for a Meal Plan: carbs ÷ carb ratio, plus (cur
 _Avoid_: recommendation, prescription, bolus advice.
 
 **Dose Settings**:
-What the Suggested Dose aims for and how it is rounded: target glucose (default 6.0 mmol/L), pen dose step (1 u or 0.5 u) and maximum single dose (default 15 u). Separate from Therapy Settings, which describe the body.
+What the Suggested Dose aims for and how it is rounded: target glucose (default 6.0 mmol/L), pen dose step (1 u or 0.5 u) and maximum single dose (default 15 u), plus when the **Stacking Warning** shows (Insulin on Board above 2 u, a Bolus within 2 h of the previous one). Separate from Therapy Settings, which describe the body.
 _Avoid_: bolus settings, calculator settings.
+
+**Stacking Warning**:
+Shown inside Dose entry, before saving a Bolus, when Insulin on Board at the Dose's time is above the Dose Settings limit or the previous Bolus was sooner than the Dose Settings interval: Insulin on Board, the previous Bolus (time and units, counting Boluses within 15 minutes of each other as one), what that Insulin on Board is still to lower glucose by (Insulin on Board × insulin sensitivity) and over how long, current glucose and Trend, the same with the new Dose added and where that would leave glucose from insulin alone (orange when below the low threshold), and a caution that correcting during a post-meal rise can stack and cause a low. Carbs on Board are not counted. Information, never a block or an amount: the save button reads **Save Anyway**. Never for Basal or when editing a Manual Dose.
+_Avoid_: stacking alert (it is not an **Alert**), IOB warning.
 
 **Strategy**:
 Claude's short advice for a Meal Plan given the Suggested Dose, the Estimate and its absorption speed, current glucose and Trend, the Forecast and recent History: when to inject relative to eating, whether and how to split the dose, what to watch for, when to check again, and cautions. It may recommend a different amount only with a stated reason, and the app then shows both side by side. The app enforces the limits itself: an amount that is negative, off the pen step, above the maximum single dose, or more than 20% (or one pen step, whichever is larger) above the Suggested Dose is discarded with a caution saying so, and there is no Claude amount at all when the Suggested Dose is withheld.
@@ -170,6 +174,7 @@ _Avoid_: initial import, onboarding.
 - A **Meal** is independent of any **Reading** or **Dose**; the graph overlays all three by time only.
 - An **Estimate** never becomes a **Meal** without a user review; the stored Meal is the user's figure, not Claude's.
 - A **Meal Plan** becomes at most one eaten **Meal** (same id). Logging a Dose from a plan records the units on the plan; the rest of a split dose shows as a reminder until logged.
+- A **Stacking Warning** counts the same reconciled Doses with the same insulin curve as the **Forecast**, so its Insulin on Board matches; unlike the Forecast it needs no Reading, and without insulin sensitivity it shows Insulin on Board and the previous Bolus only.
 - A **Suggested Dose** needs complete **Therapy Settings**, a fresh in-range **Reading** above the low threshold, and the current **Insulin on Board**; the **Strategy** never replaces it, it sits beside it.
 - A **Forecast** needs complete **Therapy Settings** and a fresh **Reading**; there is none from a Stale Reading, a LO/HI Reading, or during a **Sensor State**.
 - A **Forecast** counts only **Bolus** Doses; **Basal** is assumed to cover background needs. A Pen Dose not yet synced to Glooko is missing from it unless it was entered as a **Manual Dose**, so a Forecast right after an unsynced, unentered Bolus reads too high.

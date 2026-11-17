@@ -15,6 +15,8 @@ struct DoseLogView: View {
         _draft = State(initialValue: initialDraft)
     }
 
+    private var warning: StackingWarning? { model.stackingWarning(for: draft) }
+
     var body: some View {
         NavigationStack {
             Form {
@@ -22,6 +24,11 @@ struct DoseLogView: View {
                     DoseEntryFields(draft: $draft, defaultName: model.defaultInsulinName(for: draft.kind))
                 } footer: {
                     Text(DoseEntryFields.note)
+                }
+                if let warning {
+                    Section {
+                        StackingWarningView(warning: warning, doseUnits: draft.units, doseTime: draft.timestamp)
+                    }
                 }
                 recentSection
             }
@@ -32,7 +39,7 @@ struct DoseLogView: View {
                     Button("Cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") { save() }
+                    Button(StackingWarningView.saveTitle(warning)) { save() }
                         .disabled(!draft.isValid)
                 }
             }

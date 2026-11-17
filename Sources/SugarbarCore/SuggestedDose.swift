@@ -9,11 +9,23 @@ public struct DosingSettings: Equatable, Sendable, Codable {
     public var penStep: Double
     /// The Suggested Dose never exceeds this, in units.
     public var maxSingleDose: Double
+    /// A Bolus entered while Insulin on Board is above this, in units, shows the Stacking Warning.
+    public var stackingInsulinOnBoard: Double
+    /// A Bolus entered sooner than this after the previous one shows the Stacking Warning.
+    public var stackingInterval: TimeInterval
 
-    public init(targetGlucose: Double = 6.0, penStep: Double = 1, maxSingleDose: Double = 15) {
+    public init(
+        targetGlucose: Double = 6.0,
+        penStep: Double = 1,
+        maxSingleDose: Double = 15,
+        stackingInsulinOnBoard: Double = 2.0,
+        stackingInterval: TimeInterval = 2 * 3600
+    ) {
         self.targetGlucose = targetGlucose
         self.penStep = penStep
         self.maxSingleDose = maxSingleDose
+        self.stackingInsulinOnBoard = stackingInsulinOnBoard
+        self.stackingInterval = stackingInterval
     }
 
     public static let `default` = DosingSettings()
@@ -21,9 +33,11 @@ public struct DosingSettings: Equatable, Sendable, Codable {
     public static let targetRange: ClosedRange<Double> = 4.5...10
     public static let penSteps: [Double] = [0.5, 1]
     public static let maxSingleDoseRange: ClosedRange<Double> = 1...50
+    public static let stackingInsulinOnBoardRange: ClosedRange<Double> = 0.5...10
+    public static let stackingIntervalRange: ClosedRange<TimeInterval> = (30 * 60)...(6 * 3600)
 
     private enum CodingKeys: String, CodingKey {
-        case targetGlucose, penStep, maxSingleDose
+        case targetGlucose, penStep, maxSingleDose, stackingInsulinOnBoard, stackingInterval
     }
 
     /// Missing or out-of-range values fall back to the defaults.
@@ -33,9 +47,14 @@ public struct DosingSettings: Equatable, Sendable, Codable {
         let target = (try? container.decodeIfPresent(Double.self, forKey: .targetGlucose)) ?? nil
         let step = (try? container.decodeIfPresent(Double.self, forKey: .penStep)) ?? nil
         let cap = (try? container.decodeIfPresent(Double.self, forKey: .maxSingleDose)) ?? nil
+        let stackingOnBoard = (try? container.decodeIfPresent(Double.self, forKey: .stackingInsulinOnBoard)) ?? nil
+        let stackingGap = (try? container.decodeIfPresent(Double.self, forKey: .stackingInterval)) ?? nil
         targetGlucose = target.flatMap { Self.targetRange.contains($0) ? $0 : nil } ?? fallback.targetGlucose
         penStep = step.flatMap { Self.penSteps.contains($0) ? $0 : nil } ?? fallback.penStep
         maxSingleDose = cap.flatMap { Self.maxSingleDoseRange.contains($0) ? $0 : nil } ?? fallback.maxSingleDose
+        stackingInsulinOnBoard = stackingOnBoard.flatMap { Self.stackingInsulinOnBoardRange.contains($0) ? $0 : nil }
+            ?? fallback.stackingInsulinOnBoard
+        stackingInterval = stackingGap.flatMap { Self.stackingIntervalRange.contains($0) ? $0 : nil } ?? fallback.stackingInterval
     }
 }
 

@@ -18,12 +18,16 @@ struct DoseEntrySection: View {
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+            let warning = model.stackingWarning(for: draft)
+            if let warning {
+                StackingWarningView(warning: warning, doseUnits: draft.units, doseTime: draft.timestamp)
+            }
             HStack {
                 Spacer()
                 Button("Cancel") { isPresented = false }
                     .keyboardShortcut(.cancelAction)
-                Button("Save") { save() }
-                    .keyboardShortcut(.defaultAction)
+                Button(StackingWarningView.saveTitle(warning)) { save() }
+                    .keyboardShortcut(warning == nil ? .defaultAction : nil)
                     .disabled(!draft.isValid)
             }
             recentList
