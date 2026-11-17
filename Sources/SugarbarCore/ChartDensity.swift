@@ -129,3 +129,18 @@ private func markerTimestamp(start: Date, bucket: TimeInterval, members: [Date])
     guard let first = members.min(), let last = members.max() else { return middle }
     return min(max(middle, first), last)
 }
+
+/// Markers whose labels would overlap: each group starts at the earliest marker not yet
+/// grouped and takes in every later one within `tolerance` of it, so a chart can draw one
+/// label per group ("3 + 2.5") instead of printing them over each other.
+public func labelGroups<Marker>(_ markers: [Marker], at date: (Marker) -> Date, within tolerance: TimeInterval) -> [[Marker]] {
+    var groups: [[Marker]] = []
+    for marker in markers.sorted(by: { date($0) < date($1) }) {
+        if let first = groups.last?.first, date(marker).timeIntervalSince(date(first)) <= tolerance {
+            groups[groups.count - 1].append(marker)
+        } else {
+            groups.append([marker])
+        }
+    }
+    return groups
+}

@@ -20,6 +20,38 @@ public enum AbsorptionSpeed: String, Codable, Sendable, CaseIterable {
     }
 }
 
+/// How long a Meal's carbs take to absorb, chosen when logging or planning it. Normal is the
+/// Therapy Settings' carb absorption time; fast and slow are half and one and a half times it.
+public enum CarbAbsorption: String, Codable, Sendable, CaseIterable {
+    case fast
+    case normal
+    case slow
+
+    public init(estimate: AbsorptionSpeed?) {
+        switch estimate {
+        case .fast: self = .fast
+        case .slow: self = .slow
+        case .medium, nil: self = .normal
+        }
+    }
+
+    public func duration(normal: TimeInterval) -> TimeInterval {
+        switch self {
+        case .fast: normal * 0.5
+        case .normal: normal
+        case .slow: normal * 1.5
+        }
+    }
+
+    public var label: String {
+        switch self {
+        case .fast: "Fast"
+        case .normal: "Normal"
+        case .slow: "Slow / fatty"
+        }
+    }
+}
+
 /// The dose the user settled on while planning a Meal, and how much of it they have logged so far.
 public struct MealPlan: Equatable, Sendable, Codable {
     /// The carbs the dose was planned for, which may differ from what was eaten.
@@ -78,6 +110,7 @@ public struct Meal: Equatable, Sendable, Codable, Identifiable {
     public let proteinGrams: Double?
     public let energyKcal: Double?
     public let absorption: AbsorptionSpeed?
+    public let carbAbsorption: CarbAbsorption
     public let state: MealState
     public let plan: MealPlan?
 
@@ -91,6 +124,7 @@ public struct Meal: Equatable, Sendable, Codable, Identifiable {
         proteinGrams: Double? = nil,
         energyKcal: Double? = nil,
         absorption: AbsorptionSpeed? = nil,
+        carbAbsorption: CarbAbsorption = .normal,
         state: MealState = .eaten,
         plan: MealPlan? = nil
     ) {
@@ -103,11 +137,16 @@ public struct Meal: Equatable, Sendable, Codable, Identifiable {
         self.proteinGrams = proteinGrams
         self.energyKcal = energyKcal
         self.absorption = absorption
+        self.carbAbsorption = carbAbsorption
         self.state = state
         self.plan = plan
     }
 
     public var isEaten: Bool { state == .eaten }
+
+    public func absorptionTime(_ therapy: TherapySettings) -> TimeInterval {
+        carbAbsorption.duration(normal: therapy.carbAbsorptionTime)
+    }
     public var isPlanned: Bool { state == .planned }
 
     /// Meals saved before planning existed carry only id, time, carbs and summary, and were eaten.
@@ -122,6 +161,7 @@ public struct Meal: Equatable, Sendable, Codable, Identifiable {
         proteinGrams = try container.decodeIfPresent(Double.self, forKey: .proteinGrams)
         energyKcal = try container.decodeIfPresent(Double.self, forKey: .energyKcal)
         absorption = (try? container.decodeIfPresent(AbsorptionSpeed.self, forKey: .absorption)) ?? nil
+        carbAbsorption = (try? container.decodeIfPresent(CarbAbsorption.self, forKey: .carbAbsorption)) ?? .normal
         state = (try? container.decodeIfPresent(MealState.self, forKey: .state)) ?? .eaten
         plan = try? container.decodeIfPresent(MealPlan.self, forKey: .plan)
     }

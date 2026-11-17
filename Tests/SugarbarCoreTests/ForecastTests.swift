@@ -41,16 +41,16 @@ import Testing
         }
     }
 
-    private func single(_ value: Double) -> [Reading] {
-        [Reading(value: value, timestamp: now, trend: .stable)]
+    private func single(_ value: Double, trend: Trend = .notDetermined) -> [Reading] {
+        [Reading(value: value, timestamp: now, trend: trend)]
     }
 
     private func bolus(_ units: Double, minutesAgo: Double) -> InsulinDose {
         InsulinDose(kind: .bolus, units: units, timestamp: now.addingTimeInterval(-minutesAgo * 60), insulinName: nil, deviceName: nil)
     }
 
-    private func meal(_ grams: Double, minutesAgo: Double) -> Meal {
-        Meal(timestamp: now.addingTimeInterval(-minutesAgo * 60), carbsGrams: grams, summary: "")
+    private func meal(_ grams: Double, minutesAgo: Double, absorption: CarbAbsorption = .normal) -> Meal {
+        Meal(timestamp: now.addingTimeInterval(-minutesAgo * 60), carbsGrams: grams, summary: "", carbAbsorption: absorption)
     }
 
     private func run(
@@ -144,20 +144,28 @@ import Testing
         #expect(abs(result.eventual - 6) < 0.3)
     }
 
-    @Test func momentumIsSkippedWhenReadingsAreTooFewOrGapped() throws {
-        let sparse = [
-            Reading(value: 5, timestamp: now.addingTimeInterval(-15 * 60), trend: .rising),
+    @Test func fifteenMinuteGraphPointsStillCarryTheTrend() throws {
+        let graph = [
+            Reading(value: 5, timestamp: now.addingTimeInterval(-15 * 60), trend: .notDetermined),
             Reading(value: 8, timestamp: now, trend: .rising),
         ]
-        #expect(try #require(run(sparse)).eventual == 8)
+        #expect(abs(try #require(run(graph)).eventual - (8 + 0.2 * 15)) < 1e-9)
+    }
 
+    @Test func momentumIsSkippedWhenReadingsAreGappedOrTheTrendIsUnknown() throws {
         let gapped = [
-            Reading(value: 5, timestamp: now.addingTimeInterval(-15 * 60), trend: .rising),
-            Reading(value: 5.1, timestamp: now.addingTimeInterval(-14 * 60), trend: .rising),
-            Reading(value: 7.9, timestamp: now.addingTimeInterval(-60), trend: .rising),
-            Reading(value: 8, timestamp: now, trend: .rising),
+            Reading(value: 5, timestamp: now.addingTimeInterval(-19 * 60), trend: .rising),
+            Reading(value: 5.1, timestamp: now.addingTimeInterval(-18 * 60), trend: .rising),
+            Reading(value: 8, timestamp: now, trend: .notDetermined),
         ]
         #expect(try #require(run(gapped)).eventual == 8)
+        #expect(try #require(run(single(8))).eventual == 8)
+    }
+
+    @Test func theTrendArrowStandsInWhenThereIsOnlyTheLiveReading() throws {
+        let result = try #require(run(single(8, trend: .fallingQuickly)))
+        #expect(abs(try #require(result.trendRate) - -mmolPerL(fromMgPerDl: 2.5)) < 1e-9)
+        #expect(abs(result.eventual - (8 - mmolPerL(fromMgPerDl: 2.5) * 15)) < 1e-9)
     }
 
     @Test func momentumSlopeIsCappedAgainstNoise() throws {
@@ -166,6 +174,46 @@ import Testing
         }
         let result = try #require(run(jump))
         #expect(result.eventual - 15 <= 0.25 * 15 + 1e-9)
+    }
+
+    @Test func aSlowMealAbsorbsOverOneAndAHalfTimesTheCarbAbsorptionTime() throws {
+        let slow = try #require(run(single(6), meals: [meal(45, minutesAgo: 0, absorption: .slow)]))
+        #expect(slow.points.last?.date == now.addingTimeInterval(4.5 * 3600))
+        #expect(abs(slow.eventual - (6 + 45 * 2.5 / 10)) < 1e-9)
+        let fast = try #require(run(single(6), meals: [meal(45, minutesAgo: 60, absorption: .fast)]))
+        #expect(abs(fast.carbsOnBoard - 15) < 1e-9)
+    }
+
+    @Test func fallingFasterThanPredictedSlowsTheRemainingCarbsWithinBounds() throws {
+        func readings(slopePerMinute: Double) -> [Reading] {
+            stride(from: 30, through: 0, by: -5).map {
+                Reading(value: 8 + slopePerMinute * -Double($0), timestamp: now.addingTimeInterval(-Double($0) * 60), trend: .notDetermined)
+            }
+        }
+        let meals = [meal(60, minutesAgo: 60)]
+        let asModelled = try #require(run(readings(slopePerMinute: 60 * 2.5 / 10 / 180), meals: meals))
+        #expect(asModelled.carbAbsorptionFactor == 1)
+        let falling = try #require(run(readings(slopePerMinute: -0.03), meals: meals))
+        #expect(falling.carbAbsorptionFactor < 0.6 && falling.carbAbsorptionFactor >= carbAbsorptionFactorRange.lowerBound)
+        let rising = try #require(run(readings(slopePerMinute: 0.2), meals: meals))
+        #expect(rising.carbAbsorptionFactor == carbAbsorptionFactorRange.upperBound)
+        let noCarbs = try #require(run(readings(slopePerMinute: -0.03)))
+        #expect(noCarbs.carbAbsorptionFactor == 1)
+    }
+
+    @Test func theRangeWidensWithTimeAndWhenTrendAndModelDisagree() throws {
+        let agreeing = try #require(run(flat(6)))
+        #expect(!agreeing.isUncertain)
+        let spreads = agreeing.points.map { $0.upper - $0.lower }
+        #expect(spreads.first == 0 && zip(spreads, spreads.dropFirst()).allSatisfy { $0 < $1 })
+
+        let falling = stride(from: 15, through: 0, by: -1).map {
+            Reading(value: 8 - 0.1 * Double(15 - $0), timestamp: now.addingTimeInterval(-Double($0) * 60), trend: .falling)
+        }
+        let disagreeing = try #require(run(falling))
+        #expect(disagreeing.isUncertain)
+        #expect(disagreeing.points[6].upper - disagreeing.points[6].lower > agreeing.points[6].upper - agreeing.points[6].lower + 1)
+        #expect(disagreeing.points.allSatisfy { $0.lower <= $0.value && $0.value <= $0.upper })
     }
 
     @Test func findsTheFirstLowAndHighCrossings() throws {

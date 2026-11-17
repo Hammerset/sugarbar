@@ -30,6 +30,10 @@ public struct AlertSettings: Equatable, Sendable, Codable {
     public var predictedLowLead: TimeInterval
     public var predictsHigh: Bool
     public var predictedHighLead: TimeInterval
+    /// Warn when the CGM trend projects glucose under `fallingFastThreshold` within `fallingFastWindow`.
+    public var predictsFallingFast: Bool
+    public var fallingFastThreshold: Double
+    public var fallingFastWindow: TimeInterval
 
     public init(
         isEnabled: Bool,
@@ -40,7 +44,10 @@ public struct AlertSettings: Equatable, Sendable, Codable {
         predictsLow: Bool = true,
         predictedLowLead: TimeInterval = 30 * 60,
         predictsHigh: Bool = false,
-        predictedHighLead: TimeInterval = 60 * 60
+        predictedHighLead: TimeInterval = 60 * 60,
+        predictsFallingFast: Bool = true,
+        fallingFastThreshold: Double = 4.5,
+        fallingFastWindow: TimeInterval = 20 * 60
     ) {
         self.isEnabled = isEnabled
         self.enabledLevels = enabledLevels
@@ -51,6 +58,9 @@ public struct AlertSettings: Equatable, Sendable, Codable {
         self.predictedLowLead = predictedLowLead
         self.predictsHigh = predictsHigh
         self.predictedHighLead = predictedHighLead
+        self.predictsFallingFast = predictsFallingFast
+        self.fallingFastThreshold = fallingFastThreshold
+        self.fallingFastWindow = fallingFastWindow
     }
 
     public static let `default` = AlertSettings(
@@ -62,6 +72,8 @@ public struct AlertSettings: Equatable, Sendable, Codable {
 
     public static let repeatIntervalRange: ClosedRange<TimeInterval> = (5 * 60)...(4 * 60 * 60)
     public static let predictionLeadRange: ClosedRange<TimeInterval> = (10 * 60)...(120 * 60)
+    public static let fallingFastThresholdRange: ClosedRange<Double> = 3.9...7.0
+    public static let fallingFastWindowRange: ClosedRange<TimeInterval> = (10 * 60)...(45 * 60)
 
     public func isSnoozed(at now: Date) -> Bool {
         guard let snoozedUntil else { return false }
@@ -71,6 +83,7 @@ public struct AlertSettings: Equatable, Sendable, Codable {
     private enum CodingKeys: String, CodingKey {
         case isEnabled, enabledLevels, lowRepeatInterval, highRepeatInterval, snoozedUntil
         case predictsLow, predictedLowLead, predictsHigh, predictedHighLead
+        case predictsFallingFast, fallingFastThreshold, fallingFastWindow
     }
 
     public init(from decoder: Decoder) throws {
@@ -90,6 +103,13 @@ public struct AlertSettings: Equatable, Sendable, Codable {
         predictedHighLead = Self.clamped(
             try container.decodeIfPresent(TimeInterval.self, forKey: .predictedHighLead) ?? fallback.predictedHighLead,
             to: Self.predictionLeadRange
+        )
+        predictsFallingFast = try container.decodeIfPresent(Bool.self, forKey: .predictsFallingFast) ?? fallback.predictsFallingFast
+        let threshold = try container.decodeIfPresent(Double.self, forKey: .fallingFastThreshold) ?? fallback.fallingFastThreshold
+        fallingFastThreshold = min(max(threshold, Self.fallingFastThresholdRange.lowerBound), Self.fallingFastThresholdRange.upperBound)
+        fallingFastWindow = Self.clamped(
+            try container.decodeIfPresent(TimeInterval.self, forKey: .fallingFastWindow) ?? fallback.fallingFastWindow,
+            to: Self.fallingFastWindowRange
         )
     }
 
@@ -264,10 +284,12 @@ public func glucoseAlertConditions(
 public enum ForecastAlertFamily {
     public static let low = "forecast.low"
     public static let high = "forecast.high"
+    public static let fallingFast = "forecast.fallingFast"
 }
 
 /// Early warnings when the Forecast crosses the low threshold within `predictedLowLead`
-/// or the high threshold within `predictedHighLead`. Quiet while the latest Reading is
+/// or the high threshold within `predictedHighLead`, and when a falling CGM trend projects
+/// glucose under `fallingFastThreshold` within `fallingFastWindow`. Quiet while the latest Reading is
 /// already past that threshold, since the glucose alert covers it. `alerting` holds the
 /// families already warned about: those stay on while the crossing is within twice the
 /// lead, so a crossing hovering at the edge of the window does not re-alert every poll.
@@ -301,6 +323,21 @@ public func forecastAlertConditions(
             title: "Heading low: \(reading)",
             repeatTitle: "Still heading low: \(reading)",
             body: "Predicted below \(formatMmolPerL(thresholds.low)) in about \(minutes) min. Check, and consider carbs. Sugarbar is not a medical device.",
+            isUrgent: false
+        ))
+    }
+    let fallingFastWindow = settings.fallingFastWindow * (alerting.contains(ForecastAlertFamily.fallingFast) ? 2 : 1)
+    if settings.predictsFallingFast, band != .low, band != .urgentLow,
+       let rate = forecast.trendRate, rate < 0,
+       let lowest = forecast.lowestValue(within: fallingFastWindow), lowest < settings.fallingFastThreshold {
+        let threshold = formatMmolPerL(settings.fallingFastThreshold)
+        conditions.append(AlertCondition(
+            family: ForecastAlertFamily.fallingFast,
+            rank: 0,
+            repeatInterval: settings.lowRepeatInterval,
+            title: "Falling fast: projected under \(threshold) within \(Int(settings.fallingFastWindow / 60)) min",
+            repeatTitle: "Still falling fast: \(reading)",
+            body: "\(reading) now, changing \(String(format: "%.2f", rate)) mmol/L per min. Check with your sensor app or meter. Sugarbar is not a medical device.",
             isUrgent: false
         ))
     }

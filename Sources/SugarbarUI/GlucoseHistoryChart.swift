@@ -119,6 +119,16 @@ public struct GlucoseHistoryChart: View {
             }
 
             ForEach(forecast, id: \.date) { point in
+                AreaMark(
+                    x: .value("Time", point.date),
+                    yStart: .value("Forecast low", min(max(point.lower, glucoseFloor), yDomain.upperBound)),
+                    yEnd: .value("Forecast high", min(max(point.upper, glucoseFloor), yDomain.upperBound)),
+                    series: .value("Segment", "forecast-range")
+                )
+                .foregroundStyle(Color.primary.opacity(0.1))
+            }
+
+            ForEach(forecast, id: \.date) { point in
                 LineMark(
                     x: .value("Time", point.date),
                     y: .value("mmol/L", point.value),
@@ -146,8 +156,8 @@ public struct GlucoseHistoryChart: View {
                 .symbolSize(isHovered ? 110 : (dose.kind == .bolus ? 50 : 60))
                 .foregroundStyle(dose.kind.tint)
                 .annotation(position: .top, spacing: 1) {
-                    if showsMarkerLabels {
-                        Text(formatUnits(dose.units))
+                    if showsMarkerLabels, let label = doseLabels[dose.id] {
+                        Text(label)
                             .font(.caption2)
                             .foregroundStyle(dose.kind.tint)
                     }
@@ -164,8 +174,8 @@ public struct GlucoseHistoryChart: View {
                 .symbolSize(isHovered ? 110 : 55)
                 .foregroundStyle(mealTint)
                 .annotation(position: .trailing, spacing: 3, overflowResolution: .init(x: .fit(to: .chart), y: .disabled)) {
-                    if showsMarkerLabels {
-                        Text("\(formatGrams(meal.carbsGrams)) g")
+                    if showsMarkerLabels, let label = mealLabels[meal.id] {
+                        Text(label)
                             .font(.caption2)
                             .foregroundStyle(mealTint)
                     }
@@ -224,6 +234,25 @@ public struct GlucoseHistoryChart: View {
     private var hoverTolerance: TimeInterval { displaySpan / 60 }
 
     private var showsMarkerLabels: Bool { markerBucket == nil }
+
+    /// About a label's width in time, so markers closer than that share one label.
+    private var labelTolerance: TimeInterval { displaySpan / 20 }
+
+    private var doseLabels: [InsulinDose.ID: String] {
+        var labels: [InsulinDose.ID: String] = [:]
+        for kind in [InsulinKind.bolus, .basal] {
+            for group in labelGroups(doses.filter { $0.kind == kind }, at: \.timestamp, within: labelTolerance) {
+                labels[group[0].id] = group.map { formatUnits($0.units) }.joined(separator: " + ")
+            }
+        }
+        return labels
+    }
+
+    private var mealLabels: [Meal.ID: String] {
+        Dictionary(labelGroups(meals, at: \.timestamp, within: labelTolerance).map { group in
+            (group[0].id, group.map { formatGrams($0.carbsGrams) }.joined(separator: " + ") + " g")
+        }) { first, _ in first }
+    }
 
     private var xAxis: (values: AxisMarkValues, format: Date.FormatStyle) {
         let days = displaySpan / 86400
@@ -344,6 +373,8 @@ public struct GlucoseHistoryChart: View {
         let high = max(values.max() ?? thresholds.urgentHigh, thresholds.urgentHigh) + 0.5
         return max(0, low - stripHeight)...high
     }
+
+    private var glucoseFloor: Double { yDomain.lowerBound + stripHeight }
 
     private var stripHeight: Double {
         let rows = doseRows + (meals.isEmpty ? 0 : 1)

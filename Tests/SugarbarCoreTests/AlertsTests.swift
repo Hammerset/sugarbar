@@ -211,4 +211,25 @@ import Testing
         #expect(conditions(value: 4.6, lowIn: 40, alerting: [ForecastAlertFamily.low]).count == 1)
         #expect(conditions(value: 4.6, lowIn: 70, alerting: [ForecastAlertFamily.low]).isEmpty)
     }
+
+    @Test func warnsWhenAFallingTrendProjectsUnderTheThresholdWithinTheWindow() {
+        func fallingFast(from value: Double, perMinute rate: Double, trendRate: Double? = nil) -> [AlertCondition] {
+            let latest = Reading(value: value, timestamp: now, trend: .fallingQuickly)
+            let forecast = Forecast(
+                points: stride(from: 0.0, through: 60, by: 5).map { ForecastPoint(date: now.addingTimeInterval($0 * 60), value: value + rate * $0) },
+                insulinOnBoard: 0,
+                carbsOnBoard: 0,
+                lowCrossing: nil,
+                highCrossing: nil,
+                trendRate: trendRate ?? rate
+            )
+            return forecastAlertConditions(forecast: forecast, latest: latest, now: now, thresholds: .standard, settings: settings)
+                .filter { $0.family == ForecastAlertFamily.fallingFast }
+        }
+        let warning = fallingFast(from: 6, perMinute: -0.1)
+        #expect(warning.first?.title == "Falling fast: projected under 4.5 within 20 min")
+        #expect(fallingFast(from: 7, perMinute: -0.1).isEmpty)
+        #expect(fallingFast(from: 6, perMinute: -0.1, trendRate: 0.02).isEmpty)
+        #expect(fallingFast(from: 3.7, perMinute: -0.1).isEmpty)
+    }
 }
