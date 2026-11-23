@@ -53,6 +53,49 @@ enum Migrations {
             """,
             "CREATE INDEX doses_account_t ON doses (account_id, t)",
         ]),
+        (2, [
+            """
+            CREATE TABLE glooko_state (
+                account_id bigint PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
+                records_cursor bigint NOT NULL,
+                push_from timestamptz NOT NULL,
+                feed_updated_at text NOT NULL,
+                feed_guid text NOT NULL,
+                paused_reason text,
+                paused_settings_at timestamptz,
+                retry_at timestamptz,
+                failures integer NOT NULL DEFAULT 0,
+                summary_fingerprint text
+            )
+            """,
+            """
+            CREATE TABLE glooko_links (
+                account_id bigint NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+                source_kind text NOT NULL,
+                source_id text NOT NULL,
+                collection text NOT NULL,
+                glooko_guid text NOT NULL,
+                origin text NOT NULL,
+                desired jsonb NOT NULL,
+                desired_fingerprint text NOT NULL,
+                pushed_fingerprint text,
+                remote_fingerprint text,
+                written boolean NOT NULL,
+                status text NOT NULL,
+                last_error text,
+                attempts integer NOT NULL,
+                next_attempt_at timestamptz NOT NULL,
+                event_at timestamptz NOT NULL,
+                removal_reason text,
+                superseded_by text,
+                echoes jsonb NOT NULL,
+                status_fingerprint text,
+                PRIMARY KEY (account_id, source_kind, source_id),
+                UNIQUE (account_id, collection, glooko_guid)
+            )
+            """,
+            "CREATE INDEX glooko_links_due ON glooko_links (account_id, next_attempt_at)",
+        ]),
     ]
 
     /// Applies pending migrations in one transaction; the advisory lock lets several

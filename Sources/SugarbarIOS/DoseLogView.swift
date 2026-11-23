@@ -53,8 +53,11 @@ struct DoseLogView: View {
                     Button {
                         draft = DoseDraft(editing: dose)
                     } label: {
-                        Text(manualDoseSummary(dose))
-                            .foregroundStyle(dose.id == draft.editing?.id ? dose.kind.tint : .primary)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(manualDoseSummary(dose))
+                                .foregroundStyle(dose.id == draft.editing?.id ? dose.kind.tint : .primary)
+                            GlookoStatusText(model.sync.glooko.status(of: dose), isSending: model.sync.glooko.isSending)
+                        }
                     }
                 }
                 .onDelete { offsets in

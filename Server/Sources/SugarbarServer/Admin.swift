@@ -7,6 +7,8 @@ public enum AdminCommand {
     case createToken(account: String)
     case listAccounts
     case revokeTokens(account: String)
+    case setGlooko(account: String, email: String, password: String)
+    case removeGlooko(account: String)
 
     public static let usage = """
         usage: sugarbar-server [serve]
@@ -14,6 +16,8 @@ public enum AdminCommand {
                sugarbar-server create-token <name>     print a new extra token for an account
                sugarbar-server list-accounts
                sugarbar-server revoke-token <name>     revoke every token of an account
+               sugarbar-server set-glooko <name> <email>   store the Glooko login for an account (password on stdin)
+               sugarbar-server remove-glooko <name>    forget the Glooko login of an account
         """
 
     public init?(arguments: [String]) {
@@ -22,8 +26,19 @@ public enum AdminCommand {
         case ("create-token", 2): self = .createToken(account: arguments[1])
         case ("list-accounts", 1): self = .listAccounts
         case ("revoke-token", 2): self = .revokeTokens(account: arguments[1])
+        case ("remove-glooko", 2): self = .removeGlooko(account: arguments[1])
         default: return nil
         }
+    }
+
+    /// `set-glooko` reads the password from stdin, so it never appears in shell history or `ps`.
+    public init?(arguments: [String], readPassword: () -> String?) {
+        guard arguments.first == "set-glooko", arguments.count == 3 else {
+            self.init(arguments: arguments)
+            return
+        }
+        guard let password = readPassword()?.trimmingCharacters(in: .newlines), !password.isEmpty else { return nil }
+        self = .setGlooko(account: arguments[1], email: arguments[2], password: password)
     }
 
     /// Runs against `DATABASE_URL`, applying migrations first, and returns what to print.
@@ -33,11 +48,11 @@ public enum AdminCommand {
             group.addTask { await db.run() }
             defer { group.cancelAll() }
             try await Migrations.run(on: db, logger: logger)
-            return try await execute(db: db, logger: logger)
+            return try await execute(db: db, configuration: configuration, logger: logger)
         }
     }
 
-    private func execute(db: PostgresClient, logger: Logger) async throws -> String {
+    private func execute(db: PostgresClient, configuration: ServerConfiguration, logger: Logger) async throws -> String {
         switch self {
         case .createAccount(let name):
             return try await db.withTransaction(logger: logger) { connection in
@@ -83,6 +98,17 @@ public enum AdminCommand {
                 revoked += 1
             }
             return "revoked \(revoked) token(s) of \(name)"
+        case .setGlooko(let name, let email, let password):
+            let accountId = try await Self.accountId(name, db: db, logger: logger)
+            try Self.credentialsFile(configuration).set(account: name, credentials: GlookoCredentials(email: email, password: password))
+            try await db.query(
+                "UPDATE glooko_state SET paused_reason = NULL, paused_settings_at = NULL, retry_at = NULL, failures = 0 WHERE account_id = \(accountId)",
+                logger: logger
+            )
+            return "stored the Glooko login for \(name); turn on Send to Glooko in the app to start"
+        case .removeGlooko(let name):
+            try Self.credentialsFile(configuration).set(account: name, credentials: nil)
+            return "removed the Glooko login of \(name)"
         }
     }
 
@@ -91,6 +117,11 @@ public enum AdminCommand {
             return id
         }
         throw ConfigurationError.invalid("no account named \(name)")
+    }
+
+    private static func credentialsFile(_ configuration: ServerConfiguration) throws -> GlookoCredentialsFile {
+        guard let path = configuration.glooko.credentialsFile else { throw ConfigurationError.missing("GLOOKO_CREDENTIALS_FILE") }
+        return GlookoCredentialsFile(path: path)
     }
 
     private static func tokenMessage(account: String, token: String) -> String {

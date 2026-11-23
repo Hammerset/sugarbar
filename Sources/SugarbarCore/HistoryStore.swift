@@ -13,6 +13,8 @@ public protocol HistoryStore: AnyObject, Sendable {
     func earliestReadingDate() -> Date?
     func glookoCursor() -> Date?
     func setGlookoCursor(_ date: Date)
+    func glookoEchoes() -> Set<GlookoEcho>
+    func setGlookoEchoes(_ echoes: Set<GlookoEcho>)
 }
 
 public extension HistoryStore {
@@ -37,9 +39,9 @@ public extension HistoryStore {
 
 /// Reconciliation must see the Doses just outside the interval, or a manual Dose at its edge
 /// would lose the Glooko Dose that supersedes it.
-func reconciledDoses(in interval: ClosedRange<Date>, raw: (ClosedRange<Date>) -> [InsulinDose]) -> [InsulinDose] {
+func reconciledDoses(in interval: ClosedRange<Date>, echoes: Set<GlookoEcho>, raw: (ClosedRange<Date>) -> [InsulinDose]) -> [InsulinDose] {
     let widened = interval.lowerBound.addingTimeInterval(-manualDoseMatchTolerance)...interval.upperBound.addingTimeInterval(manualDoseMatchTolerance)
-    return reconcileDoses(raw(widened)).filter { interval.contains($0.timestamp) }
+    return reconcileDoses(raw(widened), echoes: echoes).filter { interval.contains($0.timestamp) }
 }
 
 struct DoseTombstone: Codable {
@@ -86,6 +88,7 @@ public final class FileHistoryStore: HistoryStore, @unchecked Sendable {
     private let lock = NSLock()
     private var readingMonths: [MonthKey: [Reading]] = [:]
     private var doseMonths: [MonthKey: [String: InsulinDose]] = [:]
+    private var echoes: Set<GlookoEcho>?
 
     public init(directory: URL = FileHistoryStore.defaultDirectory()) {
         self.directory = directory
@@ -111,7 +114,7 @@ public final class FileHistoryStore: HistoryStore, @unchecked Sendable {
 
     public func doses(in interval: ClosedRange<Date>) -> [InsulinDose] {
         lock.withLock {
-            reconciledDoses(in: interval) { widened in
+            reconciledDoses(in: interval, echoes: loadedEchoes()) { widened in
                 MonthKey.covering(widened).flatMap { loadedDoses($0).values.filter { widened.contains($0.timestamp) } }
             }
         }
@@ -198,6 +201,28 @@ public final class FileHistoryStore: HistoryStore, @unchecked Sendable {
     }
 
     private var cursorFile: URL { directory.appending(path: "glooko-cursor") }
+    public func glookoEchoes() -> Set<GlookoEcho> {
+        lock.withLock { loadedEchoes() }
+    }
+
+    public func setGlookoEchoes(_ echoes: Set<GlookoEcho>) {
+        lock.withLock {
+            self.echoes = echoes
+            if let data = try? JSONEncoder().encode(echoes.sorted { ($0.t, $0.kind.rawValue, $0.units) < ($1.t, $1.kind.rawValue, $1.units) }) {
+                try? data.write(to: echoesFile, options: .atomic)
+            }
+        }
+    }
+
+    private var echoesFile: URL { directory.appending(path: "glooko-echoes.json") }
+
+    private func loadedEchoes() -> Set<GlookoEcho> {
+        if let echoes { return echoes }
+        let loaded = (try? Data(contentsOf: echoesFile)).flatMap { try? JSONDecoder().decode(Set<GlookoEcho>.self, from: $0) } ?? []
+        echoes = loaded
+        return loaded
+    }
+
     private func readingsFile(_ key: MonthKey) -> URL { directory.appending(path: "readings-\(key).tsv") }
     private func dosesFile(_ key: MonthKey) -> URL { directory.appending(path: "doses-\(key).jsonl") }
 
@@ -265,6 +290,7 @@ public final class InMemoryHistoryStore: HistoryStore, @unchecked Sendable {
     private var storedReadings: [Reading] = []
     private var storedDoses: [String: InsulinDose] = [:]
     private var cursor: Date?
+    private var echoes: Set<GlookoEcho> = []
 
     public init() {}
 
@@ -274,7 +300,7 @@ public final class InMemoryHistoryStore: HistoryStore, @unchecked Sendable {
 
     public func doses(in interval: ClosedRange<Date>) -> [InsulinDose] {
         lock.withLock {
-            reconciledDoses(in: interval) { widened in storedDoses.values.filter { widened.contains($0.timestamp) } }
+            reconciledDoses(in: interval, echoes: echoes) { widened in storedDoses.values.filter { widened.contains($0.timestamp) } }
         }
     }
 
@@ -306,6 +332,8 @@ public final class InMemoryHistoryStore: HistoryStore, @unchecked Sendable {
 
     public func glookoCursor() -> Date? { lock.withLock { cursor } }
     public func setGlookoCursor(_ date: Date) { lock.withLock { cursor = date } }
+    public func glookoEchoes() -> Set<GlookoEcho> { lock.withLock { echoes } }
+    public func setGlookoEchoes(_ echoes: Set<GlookoEcho>) { lock.withLock { self.echoes = echoes } }
 }
 
 struct MonthKey: Hashable, CustomStringConvertible {
