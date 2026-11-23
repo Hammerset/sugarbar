@@ -37,6 +37,8 @@ Without Docker: `DATABASE_URL=postgres://… swift run sugarbar-server`.
 | `PORT` | `8080` | |
 | `HOST` | `0.0.0.0` | |
 | `LOG_LEVEL` | `info` | |
+| `GLOOKO_CREDENTIALS_FILE` | `/var/lib/sugarbar/glooko-credentials.json` in the image, unset otherwise | Where `set-glooko` keeps Glooko logins. Without it the Glooko bridge does not run. |
+| `GLOOKO_SIGN_IN_URL` | `https://my.glooko.com/users/sign_in?locale=en-GB` | Only for pointing the bridge at a fake Glooko in tests. |
 
 Migrations run at startup (table `schema_migrations`), so a new version upgrades the schema by itself.
 
@@ -54,6 +56,43 @@ sugarbar-server revoke-token <name>     # revokes every token of that account
 ```
 
 In compose, prefix with `docker compose exec server`.
+
+## Glooko bridge
+
+The server can send eaten Meals and manual Doses to Glooko, so the care team sees them there, and bring carbs logged in the Glooko app back as Meals. The server is the only writer to Glooko; the apps only switch it on and show what happened. It uses Glooko's unofficial mobile sync API (details and the probe that found it are in [#77](https://github.com/Hammerset/sugarbar/issues/77)), so a Glooko change can break it; when an answer looks wrong the bridge stops sending rather than guess.
+
+Turn it on for an account (here `me`) on the running local server:
+
+```sh
+cd Server
+docker compose up --build -d
+security find-generic-password -s sugarbar-glooko -w | docker compose exec -T server sugarbar-server set-glooko me "you@example.com"
+```
+
+`set-glooko <account> <email>` reads the password from stdin and stores it in `GLOOKO_CREDENTIALS_FILE` (mode 0600, on the `secrets` volume in compose). It is never logged and never goes into Postgres, so database dumps do not carry it. `remove-glooko <account>` forgets it. Then switch on **Send to Glooko** in the app (Settings → Accounts & Sync on the Mac, Sync on the iPhone).
+
+What it does, every 5 seconds per account with Send to Glooko on:
+
+- **Follows the `records` sequence.** Each changed `meal` (state `eaten` only) and `manualDose` becomes a Glooko food (`PUT /api/v2/foods`) or a manual insulin entry (`PUT /api/v2/insulins`): create and edit are the same upsert, and a deleted record (or a Meal turned back into a plan) becomes `softDeleted: true`. Only changes made after the bridge was first switched on are sent, for things that happened at most a day before that, so older entries already in Glooko are not doubled.
+- **One Glooko entry per record.** The Glooko `guid` is derived from the record id and stored in `glooko_links` before the first write, so a retry after a crash overwrites the same entry. Each item goes in its own request.
+- **Removes a manual Dose once its pen dose arrives.** Every 5 minutes it reads the insulin graph around manual Doses it sent in the last 3 days and pairs each with a pen dose of the same kind, units within 0.01 and at most 20 minutes apart, closest first and each pen dose once (the apps' `reconcileDoses` rule). A paired entry is deleted from Glooko and the reason is kept.
+- **Imports carbs logged in the Glooko app.** Every 5 minutes it reads the foods change feed (from when the bridge was first switched on). A food it did not write becomes a `meal` record with its own id, so devices get it through normal sync; later edits and deletes in Glooko follow. Its own entries coming back through the feed are recognised by guid and skipped.
+- **Times** are written as Glooko wants them, local wall-clock time with a literal `Z`, in the time zone the app sent, using the offset in force at the entry's own moment (so entries either side of a DST change keep their local time).
+- **Failures.** A sign-in that fails waits 30 minutes (repeated bad sign-ins could lock the account). Network trouble, 5xx and 429 retry with backoff from 30 seconds up to an hour. A 422 on one item marks that item failed and moves on; it is tried again only when the record changes. Any other 4xx, or an answer that does not look like Glooko's (a write that returns a body, a feed that does not decode), pauses the bridge for the account until Send to Glooko is switched off and on again or `set-glooko` is run.
+
+### Records the bridge adds
+
+These are ordinary `/v1/sync` records, an additive extension of the v1 contract in [#47](https://github.com/Hammerset/sugarbar/issues/47); older apps ignore kinds they do not know.
+
+| kind | id | written by | payload |
+|---|---|---|---|
+| `glookoSettings` | `default` | the apps | `{"enabled": bool, "timeZone": "Europe/Oslo"}` |
+| `glookoBridge` | `status` | the server | `{"state": "ok" \| "off" \| "noLogin" \| "signInFailed" \| "retrying" \| "paused", "message"?: string}` |
+| `glookoStatus` | `meal/<id>` or `manualDose/<id>` | the server | `{"state": "waiting" \| "sent" \| "failed" \| "removed" \| "deleted" \| "imported", "message"?: string, "glookoId": string, "echoes"?: [{"kind", "t", "units"}]}` |
+
+`echoes` lists every version of a manual Dose the server wrote to Glooko (kind, epoch seconds, units). Glooko's graph returns those entries without an id, so the apps use the list to drop them from their Glooko Doses; otherwise a manual Dose would count twice once its pen dose arrives. The server writes its records with an `updatedAt` at least a millisecond after the stored copy, so they always land.
+
+Run one server instance per database while the bridge is on: it assumes it is the only writer to `glooko_links`.
 
 ## Back up and restore
 

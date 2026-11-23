@@ -1,17 +1,21 @@
+import AsyncHTTPClient
 import Foundation
 import Hummingbird
 import Logging
 import PostgresNIO
+import ServiceLifecycle
 
 public struct ServerConfiguration: Sendable {
     public var databaseURL: String
     public var host: String
     public var port: Int
+    public var glooko: GlookoBridgeConfiguration
 
-    public init(databaseURL: String, host: String = "0.0.0.0", port: Int = 8080) {
+    public init(databaseURL: String, host: String = "0.0.0.0", port: Int = 8080, glooko: GlookoBridgeConfiguration = .init(credentialsFile: nil)) {
         self.databaseURL = databaseURL
         self.host = host
         self.port = port
+        self.glooko = glooko
     }
 
     public static func fromEnvironment(_ environment: [String: String] = ProcessInfo.processInfo.environment) throws -> Self {
@@ -23,6 +27,11 @@ public struct ServerConfiguration: Sendable {
         if let rawPort = environment["PORT"], !rawPort.isEmpty {
             guard let port = Int(rawPort) else { throw ConfigurationError.invalid("PORT must be a number") }
             configuration.port = port
+        }
+        if let file = environment["GLOOKO_CREDENTIALS_FILE"], !file.isEmpty { configuration.glooko.credentialsFile = file }
+        if let rawURL = environment["GLOOKO_SIGN_IN_URL"], !rawURL.isEmpty {
+            guard let url = URL(string: rawURL) else { throw ConfigurationError.invalid("GLOOKO_SIGN_IN_URL is not a URL") }
+            configuration.glooko.signInURL = url
         }
         return configuration
     }
@@ -48,14 +57,25 @@ public func buildApplication(_ configuration: ServerConfiguration, logger: Logge
     authenticated.post("doses") { request, context in try await Doses.upload(request: request, context: context, db: db) }
     authenticated.get("doses") { request, context in try await Doses.list(request: request, context: context, db: db) }
 
+    var services: [any Service] = [db]
+    if configuration.glooko.credentialsFile != nil {
+        services.append(GlookoBridge(db: db, configuration: configuration.glooko, http: makeGlookoHTTPClient(), logger: logger))
+    }
+
     var app = Application(
         router: router,
         configuration: .init(address: .hostname(configuration.host, port: configuration.port), serverName: "sugarbar-server"),
-        services: [db],
+        services: services,
         logger: logger
     )
     app.beforeServerStarts {
         try await Migrations.run(on: db, logger: logger)
     }
     return app
+}
+
+func makeGlookoHTTPClient() -> HTTPClient {
+    var configuration = HTTPClient.Configuration()
+    configuration.redirectConfiguration = .disallow
+    return HTTPClient(eventLoopGroup: HTTPClient.defaultEventLoopGroup, configuration: configuration)
 }
