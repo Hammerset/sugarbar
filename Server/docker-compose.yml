@@ -24,6 +24,8 @@ services:
     environment:
       DATABASE_URL: postgres://sugarbar:${POSTGRES_PASSWORD:-sugarbar}@db:5432/sugarbar?sslmode=disable
       PORT: "8080"
+    volumes:
+      - secrets:/var/lib/sugarbar
     ports:
       - "${SERVER_HOST_PORT:-8090}:8080"
     depends_on:
@@ -37,3 +39,4 @@ services:
 
 volumes:
   pgdata:
+  secrets:

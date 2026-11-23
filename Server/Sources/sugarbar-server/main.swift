@@ -11,7 +11,7 @@ do {
     let configuration = try ServerConfiguration.fromEnvironment()
     if arguments.isEmpty || arguments == ["serve"] {
         try await buildApplication(configuration, logger: logger).runService()
-    } else if let command = AdminCommand(arguments: arguments) {
+    } else if let command = AdminCommand(arguments: arguments, readPassword: { readLine(strippingNewline: true) }) {
         var quiet = logger
         quiet.logLevel = .error
         print(try await command.run(configuration, logger: quiet))
