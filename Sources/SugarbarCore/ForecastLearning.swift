@@ -66,6 +66,10 @@ public struct ForecastLearning: Equatable, Sendable {
     public func estimate(_ quantity: TherapyQuantity) -> ForecastParameterEstimate? {
         estimates.first { $0.quantity == quantity }
     }
+
+    func withSuggestions(_ visible: [TherapySuggestion]) -> ForecastLearning {
+        ForecastLearning(computedAt: computedAt, estimates: estimates, suggestions: suggestions.filter { visible.contains($0) }, replayScorecard: replayScorecard)
+    }
 }
 
 public func learnForecastParameters(history: HistoryStore, meals: [Meal], settings: Settings, now: Date = Date(), options: ForecastLearningOptions = .default) -> ForecastLearning {
@@ -393,4 +397,39 @@ struct ForecastReplay {
         let end = sorted.partitioningIndex { $0[keyPath: date] > interval.upperBound }
         return Array(sorted[start..<max(start, end)])
     }
+}
+
+/// The Forecast's track record and what replaying it suggests, recomputed every few hours.
+public struct ForecastReview: Equatable, Sendable {
+    public let computedAt: Date
+    public let learning: ForecastLearning
+    /// From this device's own log over the last 14 days.
+    public let logged: ForecastScorecard?
+
+    /// The logged record once it has a day's worth of scored Forecasts, else the replay with current settings.
+    public var trackRecord: ForecastScorecard? {
+        if let logged, logged.error(atMinute: 30).count >= minimumLoggedForTrackRecord { return logged }
+        return learning.replayScorecard ?? logged
+    }
+
+    public var isReplayed: Bool { trackRecord != nil && trackRecord == learning.replayScorecard && trackRecord != logged }
+}
+
+public let minimumLoggedForTrackRecord = 200
+public let trackRecordDays = 14
+
+public func reviewForecasts(history: HistoryStore, meals: [Meal], settings: Settings, log: ForecastLogStore, now: Date = Date()) -> ForecastReview {
+    let span = now.addingTimeInterval(-Double(trackRecordDays) * 86400)...now
+    let entries = log.entries(in: span)
+    let logged = entries.isEmpty ? nil : scoreForecasts(
+        entries,
+        readings: history.readings(in: span.lowerBound...now),
+        rules: AlertScoringRules(alerts: settings.alerts),
+        now: now
+    )
+    return ForecastReview(
+        computedAt: now,
+        learning: learnForecastParameters(history: history, meals: meals, settings: settings, now: now),
+        logged: logged
+    )
 }

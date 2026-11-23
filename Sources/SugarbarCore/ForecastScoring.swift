@@ -18,7 +18,7 @@ public enum ForecastSituation: Hashable, Sendable, CaseIterable {
     public var label: String {
         switch self {
         case let .afterMeal(speed): "After a \(speed.label.lowercased()) meal"
-        case .afterCorrection: "After a correction"
+        case .afterCorrection: "After a Bolus with no meal logged"
         case .overnight: "Overnight"
         case .quiet: "Quiet"
         }
@@ -262,4 +262,31 @@ public extension ForecastScorecard {
 /// Fewer scored Forecasts than this at a horizon say nothing worth showing.
 public let minimumScoredForecasts = 24
 
-func formatOneDecimal(_ value: Double) -> String { String(format: "%.1f", value) }
+public func formatOneDecimal(_ value: Double) -> String { String(format: "%.1f", value) }
+
+/// The scorecard in one line for Claude: every horizon, the situations, and both warnings.
+func forecastAccuracyText(_ card: ForecastScorecard) -> String? {
+    let horizons = forecastScoreHorizons.compactMap { minute -> String? in
+        let error = card.error(atMinute: minute)
+        guard error.count > 0 else { return nil }
+        return "\(minute) min ±\(formatOneDecimal(error.meanAbsoluteError)) (bias \(signed(error.bias)), n=\(error.count))"
+    }
+    guard !horizons.isEmpty else { return nil }
+    let situations = ForecastSituation.allCases.compactMap { situation -> String? in
+        guard let error = card.bySituation[situation]?[60], error.count >= 12 else { return nil }
+        return "\(situation.label.lowercased()) ±\(formatOneDecimal(error.meanAbsoluteError)) (bias \(signed(error.bias)))"
+    }
+    var parts = [horizons.joined(separator: ", ")]
+    if !situations.isEmpty { parts.append("at 60 min by situation: " + situations.joined(separator: ", ")) }
+    parts.append("heading-low warnings \(alertText(card.headingLow))")
+    parts.append("falling-fast warnings \(alertText(card.fallingFast))")
+    return parts.joined(separator: "; ")
+}
+
+func alertText(_ score: AlertScore) -> String {
+    var text = "\(score.hits) of \(score.warnings) right, \(score.misses) missed"
+    if let lead = score.meanLeadTime { text += ", about \(Int((lead / 60).rounded())) min ahead" }
+    return text
+}
+
+func signed(_ value: Double) -> String { String(format: "%+.1f", value) }

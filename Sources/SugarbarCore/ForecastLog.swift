@@ -316,3 +316,17 @@ public final class InMemoryForecastLogStore: ForecastLogStore, @unchecked Sendab
         lock.withLock { stored.removeAll { $0.date < now.addingTimeInterval(-forecastLogRetention) } }
     }
 }
+
+/// Logs `forecast` with what History and the Meals held when it was made.
+public func recordForecast(_ forecast: Forecast?, history: HistoryStore, meals: [Meal], settings: Settings, log: ForecastLogStore, now: Date) {
+    guard let forecast, let start = forecast.points.first?.date else { return }
+    let since = start.addingTimeInterval(-replayContext)
+    guard let entry = ForecastLogEntry(
+        forecast: forecast,
+        doses: history.doses(in: since...start),
+        meals: meals.filter { $0.timestamp >= since },
+        therapy: settings.therapy,
+        thresholds: settings.thresholds
+    ) else { return }
+    if log.append(entry) { log.prune(now: now) }
+}

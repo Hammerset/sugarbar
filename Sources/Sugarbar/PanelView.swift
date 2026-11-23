@@ -124,7 +124,8 @@ struct PanelView: View {
                     suggestions: suggestions,
                     onAccept: model.acceptSuggestion,
                     onDismiss: model.dismissSuggestion,
-                    onOpenMeal: onPlanMeal
+                    onOpenMeal: onPlanMeal,
+                    forecastReview: model.forecastReview
                 )
                 .font(.callout)
             }

@@ -45,7 +45,7 @@ public struct TherapyEstimateRows: View {
     public static let note = "Learned from clean stretches of your History: a correction Bolus with no food, or a logged Meal with its Bolus, and nothing else for about four hours. Recent days count most. Time-of-day values are shown for reference; the Forecast uses one value."
 
     public var body: some View {
-        ForEach(TherapyQuantity.allCases, id: \.self) { quantity in
+        ForEach(TherapyQuantity.learnedFromEpisodes, id: \.self) { quantity in
             quantityRows(quantity)
         }
         if let skipped = skippedLine {
@@ -146,7 +146,62 @@ public struct TherapyEstimateRows: View {
     }
 }
 
-/// Accepted and hand-made changes to sensitivity and carb ratio, newest first.
+/// Per forecast parameter: the current value, what replaying past Forecasts found best and how sure that is.
+public struct ForecastLearningRows: View {
+    let learning: ForecastLearning?
+
+    public init(learning: ForecastLearning?) {
+        self.learning = learning
+    }
+
+    public static let note = "Found by replaying the Forecast over the last six weeks of History with nearby values, one at a time, and keeping what predicted best. A change is suggested only from enough corrections, meals or days, and never more than 20% at a time."
+
+    public var body: some View {
+        if let learning, !learning.estimates.isEmpty {
+            ForEach(learning.estimates.filter { $0.eventCount > 0 }, id: \.quantity) { estimate in
+                LabeledContent(estimate.quantity.name) {
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text("Now: \(estimate.quantity.format(estimate.current))")
+                        Text("Best: \(estimate.eventCount == 0 ? "—" : estimate.quantity.format(estimate.best))")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Text(evidenceLine(estimate))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            let missing = learning.estimates.filter { $0.eventCount == 0 }
+            if !missing.isEmpty {
+                Text("Nothing to learn from yet for \(missing.map { $0.quantity.name.lowercased() }.joined(separator: ", ")): needs clean corrections or logged meals.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        } else {
+            Text("Nothing to replay yet: needs complete Therapy Settings and a few days of History.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func evidenceLine(_ estimate: ForecastParameterEstimate) -> String {
+        let noun = switch estimate.quantity {
+        case .insulinPeak, .insulinDuration: estimate.eventCount == 1 ? "clean correction" : "clean corrections"
+        case .trendBlend: estimate.eventCount == 1 ? "day" : "days"
+        default: estimate.eventCount == 1 ? "meal" : "meals"
+        }
+        guard estimate.eventCount > 0 else { return "No \(noun) to learn from yet." }
+        var line = "From \(estimate.eventCount) \(noun)"
+        if estimate.best != estimate.current, estimate.currentError.isFinite {
+            line += ": error ±\(String(format: "%.2f", estimate.currentError)) → ±\(String(format: "%.2f", estimate.bestError)) mmol/L, better for \(Int((estimate.winShare * 100).rounded()))%"
+        } else {
+            line += ": the current value predicts best"
+        }
+        line += estimate.hasEnoughEvidence ? "." : (estimate.best != estimate.current ? ". Not enough yet to suggest a change." : ".")
+        return line
+    }
+}
+
+/// Accepted and hand-made changes to Therapy Settings, newest first.
 public struct TherapyChangeLogRows: View {
     let changes: [TherapyChange]
 
@@ -160,7 +215,7 @@ public struct TherapyChangeLogRows: View {
         } else {
             ForEach(changes.reversed()) { change in
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("\(change.quantity == .carbRatio ? "Carb ratio" : "Insulin sensitivity") \(change.old.map(formatTherapyNumber) ?? "not set") → \(change.new.map(formatTherapyNumber) ?? "not set")")
+                    Text("\(change.quantity.name) \(change.old.map(change.quantity.formatNumber) ?? "not set") → \(change.new.map(change.quantity.formatNumber) ?? "not set")")
                     Text("\(change.date.formatted(date: .abbreviated, time: .shortened)) · \(change.evidence)")
                         .font(.caption)
                         .foregroundStyle(.secondary)

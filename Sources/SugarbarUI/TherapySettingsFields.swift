@@ -9,7 +9,7 @@ public struct TherapySettingsFields: View {
         _therapy = therapy
     }
 
-    public static let note = "Used to forecast where glucose is heading and to calculate the Suggested Dose when you plan a meal."
+    public static let note = "Used to forecast where glucose is heading and to calculate the Suggested Dose when you plan a meal. Each meal absorbs at the speed you pick when logging it. Forecast tuning: how long the CGM trend steers the Forecast, and how far it may slow down or speed up carbs when glucose disagrees."
 
     public var body: some View {
         LabeledContent("Insulin sensitivity") {
@@ -38,8 +38,25 @@ public struct TherapySettingsFields: View {
         Stepper(value: minutes(\.insulinPeak), in: minutesRange(TherapySettings.insulinPeakRange), step: 5) {
             LabeledContent("Insulin peak", value: "\(Int(therapy.insulinPeak / 60)) min")
         }
-        Stepper(value: hours(\.carbAbsorptionTime), in: hoursRange(TherapySettings.carbAbsorptionRange), step: 0.5) {
-            LabeledContent("Carb absorption", value: "\(formatHours(therapy.carbAbsorptionTime)) h")
+        Stepper(value: hours(\.fastCarbAbsorptionTime), in: hoursRange(TherapySettings.fastCarbAbsorptionRange), step: 0.25) {
+            LabeledContent("Fast carb absorption", value: "\(formatHours(therapy.fastCarbAbsorptionTime)) h")
+        }
+        Stepper(value: hours(\.carbAbsorptionTime), in: hoursRange(TherapySettings.carbAbsorptionRange), step: 0.25) {
+            LabeledContent("Normal carb absorption", value: "\(formatHours(therapy.carbAbsorptionTime)) h")
+        }
+        Stepper(value: hours(\.slowCarbAbsorptionTime), in: hoursRange(TherapySettings.slowCarbAbsorptionRange), step: 0.25) {
+            LabeledContent("Slow carb absorption", value: "\(formatHours(therapy.slowCarbAbsorptionTime)) h")
+        }
+        DisclosureGroup("Forecast tuning") {
+            Stepper(value: minutes(\.trendBlendDuration), in: minutesRange(TherapySettings.trendBlendRange), step: 5) {
+                LabeledContent("Trend blend", value: "\(Int(therapy.trendBlendDuration / 60)) min")
+            }
+            Stepper(value: $therapy.slowestCarbFactor, in: TherapySettings.slowestCarbFactorRange, step: 0.05) {
+                LabeledContent("Slowest carb correction", value: TherapyQuantity.slowestCarbFactor.format(therapy.slowestCarbFactor))
+            }
+            Stepper(value: $therapy.fastestCarbFactor, in: TherapySettings.fastestCarbFactorRange, step: 0.05) {
+                LabeledContent("Fastest carb correction", value: TherapyQuantity.fastestCarbFactor.format(therapy.fastestCarbFactor))
+            }
         }
     }
 
@@ -61,7 +78,8 @@ public struct TherapySettingsFields: View {
 
     private func formatHours(_ seconds: TimeInterval) -> String {
         let hours = seconds / 3600
-        return hours == hours.rounded() ? String(format: "%.0f", hours) : String(format: "%.1f", hours)
+        if hours == hours.rounded() { return String(format: "%.0f", hours) }
+        return (hours * 10) == (hours * 10).rounded() ? String(format: "%.1f", hours) : String(format: "%.2f", hours)
     }
 }
 

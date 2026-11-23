@@ -17,6 +17,7 @@ final class BarViewModel {
     private(set) var hasClaudeAPIKey = false
     private(set) var forecast: Forecast?
     private(set) var therapyEstimate: TherapyEstimate?
+    private(set) var forecastReview: ForecastReview?
     private(set) var isEstimatingTherapy = false
 
     private let credentialStore: CredentialStore
@@ -25,6 +26,7 @@ final class BarViewModel {
     private let graphSnapshotStore: GraphSnapshotStore
     private let mealStore: MealStore
     private let historyStore: HistoryStore
+    private let forecastLog: ForecastLogStore
     private let makeClient: () -> LibreLinkUpClient
     private let glookoClient: GlookoClient
     private let claudeKeyStore: CredentialStore
@@ -45,6 +47,7 @@ final class BarViewModel {
         graphSnapshotStore: GraphSnapshotStore = UserDefaultsGraphSnapshotStore(),
         mealStore: MealStore = UserDefaultsMealStore(),
         historyStore: HistoryStore = FileHistoryStore(),
+        forecastLog: ForecastLogStore = FileForecastLogStore(),
         makeClient: @escaping () -> LibreLinkUpClient = { LibreLinkUpClient(transport: URLSessionTransport()) },
         glookoClient: GlookoClient = GlookoClient(transport: URLSessionTransport()),
         claudeKeyStore: CredentialStore = KeychainStore(servicePrefix: anthropicKeychainServicePrefix),
@@ -57,6 +60,7 @@ final class BarViewModel {
         self.graphSnapshotStore = graphSnapshotStore
         self.mealStore = mealStore
         self.historyStore = historyStore
+        self.forecastLog = forecastLog
         self.makeClient = makeClient
         self.glookoClient = glookoClient
         self.settings = settingsStore.load()
@@ -198,7 +202,7 @@ final class BarViewModel {
             thresholds: settings.thresholds,
             latest: latest,
             forecast: forecast,
-            history: historySummary(history: historyStore, meals: mealStore.load(), settings: settings, forecast: forecast, days: mealStrategyHistoryDays),
+            history: historySummary(history: historyStore, meals: mealStore.load(), settings: settings, forecast: forecast, forecastReview: forecastReview, days: mealStrategyHistoryDays),
             doseCoverage: doseCoverage,
             now: Date()
         )
@@ -254,7 +258,7 @@ final class BarViewModel {
     }
 
     var therapySuggestions: [TherapySuggestion] {
-        settings.visibleSuggestions(therapyEstimate)
+        settings.visibleSuggestions(therapyEstimate, forecastLearning: forecastReview?.learning)
     }
 
     func refreshTherapyEstimateIfDue() {
@@ -268,9 +272,13 @@ final class BarViewModel {
         let history = historyStore
         let meals = mealStore.load()
         let settings = settings
+        let log = forecastLog
         Task {
-            therapyEstimate = await Task.detached(priority: .utility) {
-                estimateTherapy(history: history, meals: meals, settings: settings)
+            (therapyEstimate, forecastReview) = await Task.detached(priority: .utility) {
+                (
+                    estimateTherapy(history: history, meals: meals, settings: settings),
+                    reviewForecasts(history: history, meals: meals, settings: settings, log: log)
+                )
             }.value
             isEstimatingTherapy = false
         }
@@ -342,7 +350,7 @@ final class BarViewModel {
         AskClaudeModel(
             makeContext: { [weak self] in
                 guard let self else { return "" }
-                return historySummary(history: historyStore, meals: mealStore.load(), settings: settingsStore.load(), forecast: forecast)
+                return historySummary(history: historyStore, meals: mealStore.load(), settings: settingsStore.load(), forecast: forecast, forecastReview: forecastReview)
             },
             hasAPIKey: { [weak self] in self?.hasClaudeAPIKey ?? false },
             apiKey: { [claudeKeyStore] in Self.resolveClaudeAPIKey(claudeKeyStore) }
@@ -432,6 +440,7 @@ final class BarViewModel {
             settings: settings,
             now: now
         )
+        recordForecast(forecast, history: historyStore, meals: meals, settings: settings, log: forecastLog, now: now)
     }
 
     private func startEngine() {

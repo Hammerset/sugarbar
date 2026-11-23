@@ -61,7 +61,8 @@ struct TrendsView: View {
                         suggestions: model.therapySuggestions,
                         onAccept: model.acceptSuggestion,
                         onDismiss: model.dismissSuggestion,
-                        onOpenMeal: { openMealLog(.plan) }
+                        onOpenMeal: { openMealLog(.plan) },
+                        forecastReview: model.forecastReview
                     )
                     .font(.subheadline)
                     .padding(16)

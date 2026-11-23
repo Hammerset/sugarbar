@@ -211,7 +211,7 @@ public struct TherapySuggestion: Equatable, Sendable {
 
     public var evidence: String {
         let window = "in the last \(days) \(days == 1 ? "day" : "days")"
-        if quantity == .trendBlend { return "forecasts on \(episodeCount) \(episodeCount == 1 ? "day" : "days") \(window)" }
+        if quantity == .trendBlend { return "\(episodeCount) \(episodeCount == 1 ? "day" : "days") of Forecasts" }
         let noun: String = switch quantity {
         case .insulinSensitivity, .insulinPeak, .insulinDuration: episodeCount == 1 ? "correction" : "corrections"
         case .carbRatio, .slowestCarbFactor, .fastestCarbFactor: episodeCount == 1 ? "meal" : "meals"

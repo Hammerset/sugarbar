@@ -20,6 +20,7 @@ final class GlucoseViewModel {
     private(set) var forecast: Forecast?
     private(set) var settings: Settings
     private(set) var therapyEstimate: TherapyEstimate?
+    private(set) var forecastReview: ForecastReview?
     private(set) var isEstimatingTherapy = false
 
     private let settingsStore: SettingsStore
@@ -30,6 +31,7 @@ final class GlucoseViewModel {
     private let glookoClient: GlookoClient
     private let mealStore: MealStore
     private let historyStore: HistoryStore
+    private let forecastLog: ForecastLogStore
     private let claudeKeyStore: CredentialStore
     private let mealAnalyzer: MealAnalyzer
     private let mealStrategist = MealStrategist(transport: URLSessionTransport())
@@ -54,6 +56,7 @@ final class GlucoseViewModel {
         glookoClient: GlookoClient = GlookoClient(transport: URLSessionTransport()),
         mealStore: MealStore = UserDefaultsMealStore(),
         historyStore: HistoryStore = FileHistoryStore(),
+        forecastLog: ForecastLogStore = FileForecastLogStore(),
         claudeKeyStore: CredentialStore = KeychainStore(servicePrefix: anthropicKeychainServicePrefix),
         mealAnalyzer: MealAnalyzer = MealAnalyzer(transport: URLSessionTransport()),
         mealWriter: HealthKitMealWriter = HealthKitMealWriter(),
@@ -71,6 +74,7 @@ final class GlucoseViewModel {
         self.glookoClient = glookoClient
         self.mealStore = mealStore
         self.historyStore = historyStore
+        self.forecastLog = forecastLog
         self.claudeKeyStore = claudeKeyStore
         self.mealAnalyzer = mealAnalyzer
         self.mealWriter = mealWriter
@@ -196,7 +200,7 @@ final class GlucoseViewModel {
     }
 
     var therapySuggestions: [TherapySuggestion] {
-        settings.visibleSuggestions(therapyEstimate)
+        settings.visibleSuggestions(therapyEstimate, forecastLearning: forecastReview?.learning)
     }
 
     func refreshTherapyEstimateIfDue() {
@@ -210,9 +214,13 @@ final class GlucoseViewModel {
         let history = historyStore
         let meals = mealStore.load()
         let settings = settings
+        let log = forecastLog
         Task {
-            therapyEstimate = await Task.detached(priority: .utility) {
-                estimateTherapy(history: history, meals: meals, settings: settings)
+            (therapyEstimate, forecastReview) = await Task.detached(priority: .utility) {
+                (
+                    estimateTherapy(history: history, meals: meals, settings: settings),
+                    reviewForecasts(history: history, meals: meals, settings: settings, log: log)
+                )
             }.value
             isEstimatingTherapy = false
         }
@@ -312,7 +320,7 @@ final class GlucoseViewModel {
     func makeAskClaudeModel(settingsStore: SettingsStore = UserDefaultsSettingsStore()) -> AskClaudeModel {
         AskClaudeModel(
             makeContext: { [weak self, historyStore, mealStore] in
-                historySummary(history: historyStore, meals: mealStore.load(), settings: settingsStore.load(), forecast: self?.forecast)
+                historySummary(history: historyStore, meals: mealStore.load(), settings: settingsStore.load(), forecast: self?.forecast, forecastReview: self?.forecastReview)
             },
             hasAPIKey: { [weak self] in self?.hasClaudeAPIKey ?? false },
             apiKey: { [claudeKeyStore] in Self.resolveClaudeAPIKey(claudeKeyStore) }
@@ -355,7 +363,7 @@ final class GlucoseViewModel {
             thresholds: settings.thresholds,
             latest: latest,
             forecast: forecast,
-            history: historySummary(history: historyStore, meals: mealStore.load(), settings: settings, forecast: forecast, days: mealStrategyHistoryDays),
+            history: historySummary(history: historyStore, meals: mealStore.load(), settings: settings, forecast: forecast, forecastReview: forecastReview, days: mealStrategyHistoryDays),
             doseCoverage: doseCoverage,
             now: Date()
         )
@@ -470,5 +478,6 @@ final class GlucoseViewModel {
             settings: settings,
             now: now
         )
+        recordForecast(forecast, history: historyStore, meals: meals, settings: settings, log: forecastLog, now: now)
     }
 }
