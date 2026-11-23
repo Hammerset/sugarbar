@@ -101,8 +101,12 @@ func numberingSameTimeDoses(_ doses: [InsulinDose]) -> [InsulinDose] {
 public let manualDoseMatchTolerance: TimeInterval = 20 * 60
 
 /// Drops each manual Dose that a Glooko Dose supersedes, pairing each with at most one partner,
-/// closest in time first. Doses whose units differ are both kept.
-public func reconcileDoses(_ doses: [InsulinDose], tolerance: TimeInterval = manualDoseMatchTolerance) -> [InsulinDose] {
+/// closest in time first. Doses whose units differ are both kept. A Glooko Dose that is only the
+/// Sync Server's copy of a manual Dose (an echo) is dropped first, so it never counts twice.
+public func reconcileDoses(_ doses: [InsulinDose], tolerance: TimeInterval = manualDoseMatchTolerance, echoes: Set<GlookoEcho> = []) -> [InsulinDose] {
+    let doses = echoes.isEmpty ? doses : doses.filter { dose in
+        dose.isManual || dose.isFromPen || !echoes.contains { $0.matches(dose) }
+    }
     let manual = doses.filter(\.isManual)
     let glooko = doses.filter { !$0.isManual }
     let candidates = manual.flatMap { entry in

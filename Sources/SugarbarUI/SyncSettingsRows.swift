@@ -56,6 +56,7 @@ public struct SyncSettingsRows: View {
             if let error = coordinator.status.lastError {
                 Text(error).font(.caption).foregroundStyle(.red)
             }
+            GlookoBridgeRows(coordinator: coordinator)
         }
     }
 

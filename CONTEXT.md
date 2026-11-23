@@ -156,6 +156,13 @@ _Avoid_: backup, cloud, import (that is **Backfill**).
 The small server the user hosts (with Postgres behind it) that every device syncs with, reached with an access token per account. It stores records as given and never interprets them.
 _Avoid_: backend, cloud, API (too generic).
 
+**Glooko Bridge**:
+The part of the **Sync Server** that sends eaten Meals and **Manual Doses** to Glooko with the user's Glooko login, removes a Manual Dose there once its **Pen** Dose arrives, and turns carbs logged in the Glooko app into Meals. Switched on from the apps ("Send to Glooko"); the apps never write to Glooko themselves.
+_Avoid_: Glooko sync (that is reading Doses from Glooko), export.
+
+**Echo**:
+A Manual Dose as it comes back from Glooko after the **Glooko Bridge** wrote it: a Glooko Dose without a Pen. Never counted, so a Dose is not counted twice.
+
 **First Contact**:
 A device's first Sync with a Sync Server. Meals and Manual Doses already on the device go up stamped with their own time; settings go up only when the server has none and they are not the defaults, so a fresh install never overwrites real settings.
 _Avoid_: initial import, onboarding.
@@ -165,7 +172,7 @@ _Avoid_: initial import, onboarding.
 - A **Primary** shares to one or more **Followers**; sugarbar authenticates as a **Follower**.
 - A **Reading** has exactly one **Trend** and one status (**In-Range** / **Low** / **High**) derived from the **Reference Range**. A backfilled Reading's Trend is always not-determined: Glooko does not carry one.
 - **History** holds each **Reading** once: the same sensor Reading arriving from LibreLinkUp and from **Backfill** (timestamps within 30 s) is kept as the first copy seen. A Glooko **Dose** is identified by its kind, its timestamp and its place among Glooko Doses sharing both (ordered by units, so two pen Doses at the same second both stay); a later copy (e.g. units edited in Glooko) replaces the earlier one. Glooko gives no record id, so a Dose deleted in Glooko stays in History. A **Manual Dose** has its own identity, so two entered in the same minute both stay, and an edit replaces it in place.
-- A Glooko **Dose** supersedes at most one **Manual Dose** and vice versa, the closest in time first. If the units differ, both are kept. Everything that reads Doses (graph, totals, Forecast) sees them after superseding.
+- A Glooko **Dose** supersedes at most one **Manual Dose** and vice versa, the closest in time first. If the units differ, both are kept. An **Echo** is dropped before that. Everything that reads Doses (graph, totals, Forecast) sees them after superseding.
 - A **Reading**'s **Staleness** is independent of its value — a fresh-looking number can still be stale.
 - A **Sensor State** can exist with no current **Reading** (e.g. warm-up).
 - An **Alert** belongs to a family (low, high, heading low, heading high, falling fast). Each family debounces on its own: one alert on entering, one more on escalation, then one per repeat interval; leaving the family resets it.
@@ -182,7 +189,7 @@ _Avoid_: initial import, onboarding.
 - A carb ratio is only learned given a sensitivity (the learned one when it has enough evidence, else the working one): one Meal Episode cannot separate the two.
 - A **Suggestion** changes **Therapy Settings** only when the user accepts it; every accepted or typed change goes in the **Change Log**.
 - An **Ask Claude** conversation is pinned to the **History Summary** built for its first question; Readings that arrive later are not in it until **Start Over**.
-- Meals live in each device's App Group (phone and widget; the Mac on its own). Eaten phone Meals are mirrored to Apple Health (carbs, plus fat, protein and energy when known), and editing or deleting one updates or removes its Health samples; Meal Plans and Mac Meals are not. With **Sync**, a Meal logged on one device reaches the other; the phone mirrors Meals that arrive through Sync to Apple Health too, and the Mac never writes Health. Nothing flows from Meals to Glooko.
+- Meals live in each device's App Group (phone and widget; the Mac on its own). Eaten phone Meals are mirrored to Apple Health (carbs, plus fat, protein and energy when known), and editing or deleting one updates or removes its Health samples; Meal Plans and Mac Meals are not. With **Sync**, a Meal logged on one device reaches the other; the phone mirrors Meals that arrive through Sync to Apple Health too, and the Mac never writes Health. Eaten Meals reach Glooko only through the **Glooko Bridge**, and carbs logged in the Glooko app come back as Meals through it.
 - **Sync** carries thresholds, **Therapy Settings**, **Dose Settings**, alert settings (with a **Snooze**) and the **Change Log**; poll cadence, the followed connection, sign-ins, API keys and each device's record of posted **Alerts** stay per device.
 
 ## Example dialogue

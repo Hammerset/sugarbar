@@ -14,6 +14,7 @@ public func syncRetryDelay(afterFailures failures: Int) -> TimeInterval {
 public final class SyncCoordinator {
     public private(set) var status: SyncStatus
     public private(set) var isSyncing = false
+    public private(set) var glooko: GlookoBridgeInfo
 
     @ObservationIgnored private let engine: SyncEngine
     @ObservationIgnored private let isConfigured: () -> Bool
@@ -39,6 +40,7 @@ public final class SyncCoordinator {
         self.debounce = debounce
         self.pollInterval = pollInterval
         self.status = engine.status
+        self.glooko = engine.glooko
     }
 
     public var isEnabled: Bool { isConfigured() }
@@ -60,6 +62,13 @@ public final class SyncCoordinator {
     }
 
     public func syncNow() {
+        request(force: true)
+    }
+
+    public func setGlookoSending(_ enabled: Bool) {
+        engine.setGlookoSending(enabled)
+        glooko = engine.glooko
+        status = engine.status
         request(force: true)
     }
 
@@ -107,6 +116,7 @@ public final class SyncCoordinator {
                 rerun = false
             }
             status = engine.status
+            glooko = engine.glooko
         } while rerun
         isSyncing = false
     }

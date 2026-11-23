@@ -34,6 +34,17 @@ import Testing
         let secondSynced = pen(2, at: -5)
         #expect(reconcileDoses([early, late, synced, secondSynced]) == [secondSynced, synced])
     }
+
+    @Test func theServersCopyInGlookoNeverCountsTwice() {
+        let entered = manual(4, at: 0)
+        let echo = InsulinDose(kind: .bolus, units: 4, timestamp: t0, insulinName: "Fiasp", deviceName: nil)
+        let echoes: Set = [GlookoEcho(kind: .bolus, t: Int(t0.timeIntervalSince1970), units: 4)]
+        #expect(reconcileDoses([entered, echo], echoes: echoes) == [entered])
+
+        let synced = pen(4, at: 3)
+        #expect(reconcileDoses([entered, echo, synced], echoes: echoes) == [synced])
+        #expect(reconcileDoses([echo, synced], echoes: echoes) == [synced])
+    }
 }
 
 @Suite struct ManualDoseStoreTests {
