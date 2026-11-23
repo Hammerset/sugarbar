@@ -172,8 +172,13 @@ struct MealLogView: View {
                         Button {
                             start(MealDraft(editing: meal), mode: meal.isPlanned ? .plan : .log)
                         } label: {
-                            Text(mealSummaryLine(meal))
-                                .foregroundStyle(meal.id == draft.editing?.id ? Color.accentColor : .primary)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(mealSummaryLine(meal))
+                                    .foregroundStyle(meal.id == draft.editing?.id ? Color.accentColor : .primary)
+                                if meal.isEaten {
+                                    GlookoStatusText(model.sync.glooko.status(of: meal), isSending: model.sync.glooko.isSending)
+                                }
+                            }
                         }
                         if meal.isPlanned {
                             Spacer()

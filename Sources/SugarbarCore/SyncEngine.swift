@@ -17,14 +17,16 @@ public struct SyncAppliedChanges: Equatable, Sendable {
     public var meals: Set<UUID> = []
     public var history = false
     public var settings = false
+    public var glooko = false
 
-    public init(meals: Set<UUID> = [], history: Bool = false, settings: Bool = false) {
+    public init(meals: Set<UUID> = [], history: Bool = false, settings: Bool = false, glooko: Bool = false) {
         self.meals = meals
         self.history = history
         self.settings = settings
+        self.glooko = glooko
     }
 
-    public var isEmpty: Bool { meals.isEmpty && !history && !settings }
+    public var isEmpty: Bool { meals.isEmpty && !history && !settings && !glooko }
 }
 
 /// Local-first sync with a Sync Server. Local edits are found by comparing each record with what this
@@ -76,6 +78,27 @@ public final class SyncEngine {
     public var status: SyncStatus {
         let state = state ?? stateStore.load()
         return SyncStatus(lastSync: state?.lastSync, pendingCount: state?.pendingCount ?? 0, lastError: state?.lastError)
+    }
+
+    public var glooko: GlookoBridgeInfo {
+        (state ?? stateStore.load())?.glooko ?? GlookoBridgeInfo()
+    }
+
+    /// Asks the Sync Server to send to Glooko or stop, through a synced `glookoSettings` record.
+    /// The time zone lets the server write Glooko's local wall-clock times.
+    public func setGlookoSending(_ enabled: Bool, timeZone: TimeZone = .current) {
+        guard let configuration = configuration() else { return }
+        prepareState(for: configuration)
+        guard var state else { return }
+        var info = state.glooko ?? GlookoBridgeInfo()
+        let settings = GlookoBridgeSettings(enabled: enabled, timeZone: timeZone.identifier)
+        let stamp = max(SyncStamp(date: now()), (info.settingsUpdatedAt ?? 0) + 1)
+        info.settings = settings
+        info.settingsUpdatedAt = stamp
+        state.glooko = info
+        state.enqueue(SyncChange(kind: GlookoBridgeInfo.settingsKind, id: SyncKind.settingsRecordId, updatedAt: stamp, deleted: false, payload: try? JSONValue(encoding: settings)))
+        self.state = state
+        save()
     }
 
     /// Queues local edits without touching the network, so each one is stamped close to when it happened.
@@ -222,7 +245,12 @@ public final class SyncEngine {
     private func applyRemote(_ changes: [SyncChange]) {
         guard let state else { return }
         var newest: [SyncKind: [String: SyncChange]] = [:]
+        var applied = SyncAppliedChanges()
         for change in changes {
+            if GlookoBridgeInfo.kinds.contains(change.kind) {
+                applied.merge(applyGlooko(change))
+                continue
+            }
             if change.kind == HistoryRange.kind {
                 if !change.id.hasPrefix(state.deviceId.uuidString), let range = try? change.payload?.decode(HistoryRange.self) {
                     self.state?.pendingDownloads.append(range)
@@ -234,7 +262,6 @@ public final class SyncEngine {
             if let seen = newest[kind]?[change.id], seen.updatedAt >= change.updatedAt { continue }
             newest[kind, default: [:]][change.id] = change
         }
-        var applied = SyncAppliedChanges()
         for (kind, byId) in newest {
             let records = byId.values.map { RemoteRecord(id: $0.id, payload: $0.deleted ? nil : $0.payload) }
             let result = applyLocally(records, of: kind)
@@ -246,6 +273,29 @@ public final class SyncEngine {
             }
         }
         if !applied.isEmpty { onRemoteChanges(applied) }
+    }
+
+    private func applyGlooko(_ change: SyncChange) -> SyncAppliedChanges {
+        var info = state?.glooko ?? GlookoBridgeInfo()
+        let before = info
+        switch change.kind {
+        case GlookoBridgeInfo.settingsKind:
+            guard change.updatedAt > (info.settingsUpdatedAt ?? .min) else { return SyncAppliedChanges() }
+            info.settingsUpdatedAt = change.updatedAt
+            info.settings = change.deleted ? nil : try? change.payload?.decode(GlookoBridgeSettings.self)
+        case GlookoBridgeInfo.summaryKind:
+            info.summary = change.deleted ? nil : try? change.payload?.decode(GlookoBridgeSummary.self)
+        default:
+            info.items[change.id] = change.deleted ? nil : try? change.payload?.decode(GlookoItemStatus.self)
+        }
+        guard info != before else { return SyncAppliedChanges() }
+        state?.glooko = info
+        var applied = SyncAppliedChanges(glooko: true)
+        if info.echoes != before.echoes, info.echoes != history.glookoEchoes() {
+            history.setGlookoEchoes(info.echoes)
+            applied.history = true
+        }
+        return applied
     }
 
     private func applyLocally(_ records: [RemoteRecord], of kind: SyncKind) -> (fingerprints: [String: String?], changes: SyncAppliedChanges) {
@@ -433,5 +483,6 @@ extension SyncAppliedChanges {
         meals.formUnion(other.meals)
         history = history || other.history
         settings = settings || other.settings
+        glooko = glooko || other.glooko
     }
 }

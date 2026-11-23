@@ -199,10 +199,15 @@ struct MealLogWindow: View {
             } else {
                 List(recent) { meal in
                     HStack {
-                        Text(mealSummaryLine(meal))
-                            .font(.callout)
-                            .foregroundStyle(meal.id == draft.editing?.id ? Color.accentColor : .primary)
-                            .lineLimit(2)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(mealSummaryLine(meal))
+                                .font(.callout)
+                                .foregroundStyle(meal.id == draft.editing?.id ? Color.accentColor : .primary)
+                                .lineLimit(2)
+                            if meal.isEaten {
+                                GlookoStatusText(model.sync.glooko.status(of: meal), isSending: model.sync.glooko.isSending)
+                            }
+                        }
                         Spacer()
                         if meal.isPlanned {
                             Button("Eating Now", systemImage: "fork.knife") { start(MealDraft(eating: meal), mode: .log) }

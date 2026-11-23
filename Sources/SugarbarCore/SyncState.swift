@@ -57,6 +57,7 @@ public struct SyncState: Codable, Equatable, Sendable {
     var dosesUploaded: [String: String] = [:]
     var dosesDownloadedThrough: Int?
     var lastDeepDownload: Date?
+    var glooko: GlookoBridgeInfo?
     public internal(set) var lastSync: Date?
     public internal(set) var lastError: String?
 

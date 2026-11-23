@@ -40,9 +40,12 @@ struct DoseEntrySection: View {
                 .help(DoseEntryFields.note)
             ForEach(recent) { dose in
                 HStack {
-                    Text(manualDoseSummary(dose))
-                        .font(.caption)
-                        .foregroundStyle(dose.id == draft.editing?.id ? dose.kind.tint : .primary)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(manualDoseSummary(dose))
+                            .font(.caption)
+                            .foregroundStyle(dose.id == draft.editing?.id ? dose.kind.tint : .primary)
+                        GlookoStatusText(model.sync.glooko.status(of: dose), isSending: model.sync.glooko.isSending)
+                    }
                     Spacer()
                     Button("Edit", systemImage: "pencil") { draft = DoseDraft(editing: dose) }
                     Button("Delete", systemImage: "trash") {
