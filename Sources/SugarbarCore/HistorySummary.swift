@@ -21,6 +21,7 @@ public func historySummary(
     forecast: Forecast? = nil,
     therapyEstimate: TherapyEstimate? = nil,
     therapyChanges: [TherapyChange] = [],
+    forecastReview: ForecastReview? = nil,
     now: Date,
     days: Int = defaultSummaryDays,
     timeZone: TimeZone = .current
@@ -37,6 +38,7 @@ public func historySummary(
         forecast: forecast,
         therapyEstimate: therapyEstimate,
         therapyChanges: therapyChanges,
+        forecastReview: forecastReview,
         now: now,
         span: span,
         days: max(days, 1),
@@ -45,7 +47,15 @@ public func historySummary(
     return summary.build()
 }
 
-public func historySummary(history: HistoryStore, meals: [Meal], settings: Settings, forecast: Forecast? = nil, now: Date = Date(), days: Int = defaultSummaryDays) -> String {
+public func historySummary(
+    history: HistoryStore,
+    meals: [Meal],
+    settings: Settings,
+    forecast: Forecast? = nil,
+    forecastReview: ForecastReview? = nil,
+    now: Date = Date(),
+    days: Int = defaultSummaryDays
+) -> String {
     let span = historySummaryInterval(now: now, days: days)
     return historySummary(
         readings: history.readings(in: span),
@@ -57,6 +67,9 @@ public func historySummary(history: HistoryStore, meals: [Meal], settings: Setti
         forecast: forecast,
         therapyEstimate: estimateTherapy(history: history, meals: meals, settings: settings, now: now),
         therapyChanges: settings.therapyLearning.changes,
+        forecastReview: forecastReview.map { review in
+            ForecastReview(computedAt: review.computedAt, learning: review.learning.withSuggestions(settings.visibleSuggestions(nil, forecastLearning: review.learning)), logged: review.logged)
+        },
         now: now,
         days: days
     )
@@ -101,6 +114,7 @@ private struct SummaryBuilder {
     let forecast: Forecast?
     let therapyEstimate: TherapyEstimate?
     let therapyChanges: [TherapyChange]
+    let forecastReview: ForecastReview?
     let now: Date
     let span: ClosedRange<Date>
     let days: Int
@@ -123,6 +137,7 @@ private struct SummaryBuilder {
             "Therapy settings: \(therapyLine()).",
         ]
         lines += learnedLines()
+        lines += forecastReviewLines()
         lines += [
             "Sources: Readings from a FreeStyle Libre 3 CGM (1-minute live, 5-minute backfill). Doses from Glooko: pen Doses only appear after the pen is synced over NFC, so recent Doses may be missing unless the user entered them in sugarbar (marked as such; Glooko's copy replaces them once synced). Meals only if the user logged them in the app. Basal Doses are long-acting insulin.",
         ]
@@ -152,7 +167,8 @@ private struct SummaryBuilder {
         parts.append(therapy.insulinSensitivity.map { "insulin sensitivity \(number($0)) mmol/L per u" } ?? "insulin sensitivity not set")
         parts.append(therapy.carbRatio.map { "carb ratio \(number($0)) g per u" } ?? "carb ratio not set")
         parts.append("insulin duration \(number(therapy.insulinDuration / 3600)) h, peak \(Int(therapy.insulinPeak / 60)) min")
-        parts.append("carb absorption \(number(therapy.carbAbsorptionTime / 3600)) h")
+        parts.append("carb absorption fast \(number(therapy.fastCarbAbsorptionTime / 3600)) h, normal \(number(therapy.carbAbsorptionTime / 3600)) h, slow \(number(therapy.slowCarbAbsorptionTime / 3600)) h")
+        parts.append("Forecast trend blend \(Int(therapy.trendBlendDuration / 60)) min, carb correction \(formatFactor(therapy.slowestCarbFactor))–\(formatFactor(therapy.fastestCarbFactor))×")
         return parts.joined(separator: "; ")
     }
 
@@ -160,15 +176,30 @@ private struct SummaryBuilder {
         var lines: [String] = []
         if let estimate = therapyEstimate {
             lines.append("Learned from History by the app (recency-weighted, half-life 7 days; shown to the user as suggestions, never applied without their acceptance):")
-            for quantity in TherapyQuantity.allCases {
+            for quantity in TherapyQuantity.learnedFromEpisodes {
                 lines.append("- " + learnedLine(quantity, estimate))
             }
         }
         for change in therapyChanges.suffix(5) {
-            let name = change.quantity == .carbRatio ? "carb ratio" : "insulin sensitivity"
-            let old = change.old.map(number) ?? "unset"
-            let new = change.new.map(number) ?? "unset"
+            let name = change.quantity.name.lowercased()
+            let old = change.old.map(change.quantity.formatNumber) ?? "unset"
+            let new = change.new.map(change.quantity.formatNumber) ?? "unset"
             lines.append("Setting change \(format(change.date, "yyyy-MM-dd")): \(name) \(old) → \(new) (\(change.evidence)).")
+        }
+        return lines
+    }
+
+    private func forecastReviewLines() -> [String] {
+        guard let review = forecastReview else { return [] }
+        var lines: [String] = []
+        if let card = review.trackRecord, let line = forecastAccuracyText(card) {
+            let source = review.isReplayed ? "replayed from History with the current settings" : "the app's own logged Forecasts"
+            lines.append("Forecast accuracy, last \(trackRecordDays) days (\(source); mean absolute error, bias = predicted minus actual): \(line).")
+        }
+        let pending = review.learning.suggestions
+        if !pending.isEmpty {
+            lines.append("Pending Forecast parameter suggestions (from replaying past Forecasts; not applied unless the user accepts):")
+            lines += pending.map { "- \($0.text)" }
         }
         return lines
     }

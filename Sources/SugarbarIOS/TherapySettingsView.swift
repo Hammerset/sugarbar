@@ -51,6 +51,13 @@ struct TherapySettingsView: View {
             } footer: {
                 Text(TherapyEstimateRows.note)
             }
+            Section {
+                ForecastLearningRows(learning: model.forecastReview?.learning)
+            } header: {
+                Text("Forecast Timing Learned from History")
+            } footer: {
+                Text(ForecastLearningRows.note)
+            }
             Section("Therapy Changes") {
                 TherapyChangeLogRows(changes: model.settings.therapyLearning.changes)
             }

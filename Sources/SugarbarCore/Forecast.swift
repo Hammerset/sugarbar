@@ -108,12 +108,10 @@ public let forecastDisplayHorizon: TimeInterval = 3 * 3600
 /// The sensor's own reporting range; a Forecast outside it (or below zero) is not a meaningful number.
 public let forecastValueRange = mmolPerL(fromMgPerDl: 40)...mmolPerL(fromMgPerDl: 500)
 public let momentumWindow: TimeInterval = 15 * 60
-public let momentumBlendDuration: TimeInterval = 30 * 60
 /// About 1 mg/dL per minute: a gap between trend and model the Forecast calls uncertain.
 public let forecastDisagreementMargin = 0.06
 public let retrospectiveWindow: TimeInterval = 30 * 60
 public let retrospectiveFadeDuration: TimeInterval = 60 * 60
-public let carbAbsorptionFactorRange = 0.25...2.0
 
 /// Where glucose is heading, summing Bolus insulin, Meal carbs and recent momentum.
 /// Nil when the therapy settings are incomplete or invalid, there is no fresh in-range
@@ -158,7 +156,9 @@ public func forecast(
 
     func modelled(at date: Date) -> Double { insulinEffect(at: date) + carbEffect(at: date) }
 
-    let carbFactor = retrospectiveCarbFactor(readings: readings, latest: latest, modelled: modelled(at:), carbEffect: carbEffect(at:))
+    let carbFactor = retrospectiveCarbFactor(
+        readings: readings, latest: latest, modelled: modelled(at:), carbEffect: carbEffect(at:), range: therapy.carbFactorRange
+    )
     /// Past the latest Reading the carbs' clock runs at `carbFactor`, easing back to real time.
     func carbClock(_ date: Date) -> Date {
         let ahead = date.timeIntervalSince(anchor)
@@ -195,7 +195,7 @@ public func forecast(
         value += current - previousEffect
         previousEffect = current
         let midpoint = (Double(step) - 0.5) * forecastStep
-        value += max(0, 1 - midpoint / momentumBlendDuration) * momentum * forecastStep
+        value += max(0, 1 - midpoint / therapy.trendBlendDuration) * momentum * forecastStep
         let minutes = Double(step) * forecastStep / 60
         let spread = 0.25 + 0.01 * minutes + 0.5 * disagreement * min(minutes, 60)
         points.append(ForecastPoint(
@@ -293,13 +293,14 @@ private func slope(_ readings: [Reading], latest: Reading, explained: (Date) -> 
 /// Retrospective correction: over the last 30 minutes, glucose changed by `actual` where the
 /// model predicted `modelled`. With carbs absorbing, the miss is put down to them absorbing
 /// slower (falling faster than predicted) or faster (rising faster), as a factor on the carbs'
-/// absorption rate within `carbAbsorptionFactorRange`. 1 when there is no carb effect to adjust,
+/// absorption rate within `range`. 1 when there is no carb effect to adjust,
 /// no Reading about 30 minutes back, or the miss is within the Readings' noise.
 func retrospectiveCarbFactor(
     readings: [Reading],
     latest: Reading,
     modelled: (Date) -> Double,
-    carbEffect: (Date) -> Double
+    carbEffect: (Date) -> Double,
+    range: ClosedRange<Double> = TherapySettings.default.carbFactorRange
 ) -> Double {
     let target = latest.timestamp.addingTimeInterval(-retrospectiveWindow)
     guard let reference = readings
@@ -313,7 +314,7 @@ func retrospectiveCarbFactor(
     let miss = (latest.value - reference.value) - (modelled(latest.timestamp) - modelled(reference.timestamp))
     let beyondNoise = miss.sign == .minus ? min(0, miss + retrospectiveDeadband) : max(0, miss - retrospectiveDeadband)
     let factor = (carbWindow + beyondNoise) / carbWindow
-    return min(max(factor, carbAbsorptionFactorRange.lowerBound), carbAbsorptionFactorRange.upperBound)
+    return min(max(factor, range.lowerBound), range.upperBound)
 }
 
 public extension Trend {
@@ -353,7 +354,7 @@ public func forecastFromHistory(
     now: Date
 ) -> Forecast? {
     let therapy = settings.therapy
-    let since = now.addingTimeInterval(-max(therapy.insulinDuration, CarbAbsorption.slow.duration(normal: therapy.carbAbsorptionTime)))
+    let since = now.addingTimeInterval(-max(therapy.insulinDuration, therapy.slowCarbAbsorptionTime))
     return forecast(
         readings: history.readings(in: now.addingTimeInterval(-4 * momentumWindow)...now),
         doses: history.doses(in: since...now),

@@ -64,3 +64,15 @@ import Testing
         #expect(store.load().selectedPatientId == nil)
     }
 }
+
+@Suite struct TherapySettingsMigrationTests {
+    @Test func settingsFromBeforePerClassAbsorptionKeepTheirTimings() throws {
+        let old = #"{"insulinSensitivity":3,"carbRatio":12,"insulinDuration":18000,"insulinPeak":4500,"carbAbsorptionTime":7200}"#
+        let therapy = try JSONDecoder().decode(TherapySettings.self, from: Data(old.utf8))
+        #expect(therapy.fastCarbAbsorptionTime == 3600)
+        #expect(therapy.slowCarbAbsorptionTime == 3 * 3600)
+        #expect(therapy.trendBlendDuration == 30 * 60)
+        #expect(therapy.carbFactorRange == 0.25...2.0)
+        #expect(therapy.isValid)
+    }
+}

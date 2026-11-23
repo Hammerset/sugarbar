@@ -20,8 +20,8 @@ public enum AbsorptionSpeed: String, Codable, Sendable, CaseIterable {
     }
 }
 
-/// How long a Meal's carbs take to absorb, chosen when logging or planning it. Normal is the
-/// Therapy Settings' carb absorption time; fast and slow are half and one and a half times it.
+/// How long a Meal's carbs take to absorb, chosen when logging or planning it; each speed has its
+/// own time in Therapy Settings.
 public enum CarbAbsorption: String, Codable, Sendable, CaseIterable {
     case fast
     case normal
@@ -32,14 +32,6 @@ public enum CarbAbsorption: String, Codable, Sendable, CaseIterable {
         case .fast: self = .fast
         case .slow: self = .slow
         case .medium, nil: self = .normal
-        }
-    }
-
-    public func duration(normal: TimeInterval) -> TimeInterval {
-        switch self {
-        case .fast: normal * 0.5
-        case .normal: normal
-        case .slow: normal * 1.5
         }
     }
 
@@ -145,7 +137,7 @@ public struct Meal: Equatable, Sendable, Codable, Identifiable {
     public var isEaten: Bool { state == .eaten }
 
     public func absorptionTime(_ therapy: TherapySettings) -> TimeInterval {
-        carbAbsorption.duration(normal: therapy.carbAbsorptionTime)
+        therapy.absorptionTime(carbAbsorption)
     }
 
     /// Grams absorbed by `date`, linearly over the absorption time.

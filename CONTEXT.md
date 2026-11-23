@@ -65,7 +65,7 @@ A connected insulin pen (NovoPen 6) whose memory is synced to the Glooko app ove
 _Avoid_: device (too generic), smart pen.
 
 **Meal**:
-Carbohydrates eaten at a point in time, in grams, with a short description, and fat, protein and energy when an Estimate gave them. Logged on the phone or the Mac from a photo, a description, or both: Claude proposes an **Estimate**, the user confirms or edits the grams, and the confirmed figure is saved next to Claude's original one. The user can also skip the Estimate and type the grams. Each Meal has a **Carb Absorption** speed: fast (half the carb absorption time, about 1.5 h), normal (the carb absorption time, about 3 h) or slow/fatty (1.5×, about 4.5 h: pasta, pizza, creamy or fatty dishes); normal unless the user picks another, prefilled from Claude's absorption class when there is an Estimate. A saved Meal can be edited or deleted. A Meal is either **eaten** or a **Meal Plan**.
+Carbohydrates eaten at a point in time, in grams, with a short description, and fat, protein and energy when an Estimate gave them. Logged on the phone or the Mac from a photo, a description, or both: Claude proposes an **Estimate**, the user confirms or edits the grams, and the confirmed figure is saved next to Claude's original one. The user can also skip the Estimate and type the grams. Each Meal has a **Carb Absorption** speed: fast (about 1.5 h), normal (about 3 h) or slow/fatty (about 4.5 h: pasta, pizza, creamy or fatty dishes), each with its own time in Therapy Settings; normal unless the user picks another, prefilled from Claude's absorption class when there is an Estimate. A saved Meal can be edited or deleted. A Meal is either **eaten** or a **Meal Plan**.
 _Avoid_: food log, entry, carbs (the number, not the event).
 
 **Meal Plan**:
@@ -109,7 +109,7 @@ The share of a Range spent in each Band. Counted in five-minute slots, so a minu
 _Avoid_: TIR in UI copy, score, compliance.
 
 **Therapy Settings**:
-The user's personal factors the Forecast needs: insulin sensitivity (mmol/L one unit of Bolus lowers glucose), carb ratio (grams one unit covers), and insulin duration, insulin peak and carb absorption time. Sensitivity and carb ratio are working values: typed in, or accepted from a **Suggestion**, and kept up to date with the user as they drift. They have no defaults; the timings default to 6 h, 75 min and 3 h.
+The user's personal factors the Forecast needs: insulin sensitivity (mmol/L one unit of Bolus lowers glucose), carb ratio (grams one unit covers), and insulin duration, insulin peak and a carb absorption time per **Carb Absorption** speed, plus the Forecast's tuning: the trend blend and the carb correction limits. Sensitivity and carb ratio are working values: typed in, or accepted from a **Suggestion**, and kept up to date with the user as they drift. They have no defaults; the timings default to 6 h, 75 min and 1.5 / 3 / 4.5 h, the tuning to 30 min and 0.25–2×.
 _Avoid_: profile, factors, ISF/ICR in UI text.
 
 **Episode**:
@@ -121,16 +121,28 @@ The sensitivity or carb ratio the app infers from recent Episodes, newer ones we
 _Avoid_: prediction, recommendation, auto-tune.
 
 **Suggestion**:
-An offer to change a working Therapy Setting to its Learned Estimate, shown when the evidence is strong enough and the estimate differs from the working value by more than 10% (or there is none yet). Accept writes it; Dismiss hides it until the estimate moves again.
+An offer to change a working Therapy Setting to its Learned Estimate, shown when the evidence is strong enough and the estimate differs from the working value by more than 10% (or there is none yet); for insulin timing, absorption times and Forecast tuning, when **Replaying** the Forecast with a value at most 20% away predicts clearly and consistently better. Accept writes it; Dismiss hides it until the estimate moves again.
 _Avoid_: recommendation, advice, alert.
 
 **Change Log**:
-The record of changes to sensitivity and carb ratio, each with its date, old and new value, and where it came from (a Suggestion's evidence, or entered by hand). Kept with the settings.
+The record of changes to Therapy Settings, each with its date, old and new value, and where it came from (a Suggestion's evidence, or entered by hand). Kept with the settings.
 _Avoid_: history (that is History), audit trail.
 
 **Forecast**:
 Where glucose is predicted to head, in 5-minute points from the latest Reading until every Dose and Meal has finished acting (at least 3 hours): the summed effect of Bolus insulin, Meal carbs (each at its own Carb Absorption speed) and recent momentum (the part of the CGM trend that insulin and carbs do not explain, at full weight at first and gone after 30 minutes). A **retrospective correction** slows the remaining carbs when glucose fell faster over the last 30 minutes than predicted, and speeds them up when it rose faster, easing back over an hour. Every point has an uncertainty range that widens with time and when trend and model disagree; past a set margin the Forecast is **uncertain** and says so. Carries the eventual (settled) value and the first predicted crossing of the low and high thresholds. Says where glucose is heading; how much insulin to take is the separate **Suggested Dose**. The graph draws the first 3 hours dashed past the latest Reading on the 4h, 12h and 24h Ranges.
 _Avoid_: prediction (fine in prose, not as a type), projection.
+
+**Forecast Log**:
+Each device's own record of the Forecasts it made: what each predicted up to 2 hours ahead and what it knew (Insulin and Carbs on Board, trend, Meals and Boluses still acting, the settings used). One per 5 minutes, kept about 90 days, never synced.
+_Avoid_: prediction history, audit.
+
+**Track Record**:
+How far off the Forecast has been over the last 14 days, per horizon and situation, and how many of its heading-low and falling-fast warnings were right, missed or false. From the Forecast Log, or from **Replaying** until the log has a day of its own.
+_Avoid_: accuracy score, performance.
+
+**Replaying**:
+Re-running the Forecast at past moments from History as it was then, with the current or candidate Therapy Settings, to see which predicts best.
+_Avoid_: simulation, backtest (fine in code).
 
 **Insulin on Board**:
 Bolus units still to act at a moment, from each Dose's exponential activity curve. Basal is not counted.
@@ -141,7 +153,7 @@ Grams of logged Meal carbs not yet absorbed at a moment, with each Meal absorbin
 _Avoid_: COB in UI text, active carbs.
 
 **History Summary**:
-The compact text account of recent **History**, **Doses**, **Meals** (with fat and protein, and open **Meal Plans** marked as not eaten), the dose calculation behind the **Suggested Dose**, thresholds, **Therapy Settings**, **Learned Estimates** and the **Change Log** that Ask Claude sends to Claude: the last 24 hours at 15-minute resolution with every event, one line per day, and a median-by-hour profile, in mmol/L and local time. Built once per conversation.
+The compact text account of recent **History**, **Doses**, **Meals** (with fat and protein, and open **Meal Plans** marked as not eaten), the dose calculation behind the **Suggested Dose**, thresholds, **Therapy Settings**, **Learned Estimates**, the **Change Log**, the Forecast's **Track Record** and pending Suggestions that Ask Claude sends to Claude: the last 24 hours at 15-minute resolution with every event, one line per day, and a median-by-hour profile, in mmol/L and local time. Built once per conversation.
 _Avoid_: export, report, dump.
 
 **Ask Claude**:
@@ -188,6 +200,8 @@ _Avoid_: initial import, onboarding.
 - Only eaten Meals with user-confirmed carbs count toward a **Meal Episode**.
 - A carb ratio is only learned given a sensitivity (the learned one when it has enough evidence, else the working one): one Meal Episode cannot separate the two.
 - A **Suggestion** changes **Therapy Settings** only when the user accepts it; every accepted or typed change goes in the **Change Log**.
+- A Suggestion from **Replaying** moves a setting at most 20% at a time; while an insulin timing Suggestion is pending, no absorption time is suggested.
+- The **Forecast Log** stays on its device; **Sync** carries the settings it was made with, not the log.
 - An **Ask Claude** conversation is pinned to the **History Summary** built for its first question; Readings that arrive later are not in it until **Start Over**.
 - Meals live in each device's App Group (phone and widget; the Mac on its own). Eaten phone Meals are mirrored to Apple Health (carbs, plus fat, protein and energy when known), and editing or deleting one updates or removes its Health samples; Meal Plans and Mac Meals are not. With **Sync**, a Meal logged on one device reaches the other; the phone mirrors Meals that arrive through Sync to Apple Health too, and the Mac never writes Health. Eaten Meals reach Glooko only through the **Glooko Bridge**, and carbs logged in the Glooko app come back as Meals through it.
 - **Sync** carries thresholds, **Therapy Settings**, **Dose Settings**, alert settings (with a **Snooze**) and the **Change Log**; poll cadence, the followed connection, sign-ins, API keys and each device's record of posted **Alerts** stay per device.

@@ -278,6 +278,8 @@ public struct GlanceDetails: View {
     private let onAccept: (TherapySuggestion) -> Void
     private let onDismiss: (TherapySuggestion) -> Void
     private let onOpenMeal: () -> Void
+    private let forecastReview: ForecastReview?
+    @State private var showsAccuracy = false
 
     public init(
         windowLabel: String,
@@ -290,8 +292,10 @@ public struct GlanceDetails: View {
         suggestions: [TherapySuggestion],
         onAccept: @escaping (TherapySuggestion) -> Void,
         onDismiss: @escaping (TherapySuggestion) -> Void,
-        onOpenMeal: @escaping () -> Void
+        onOpenMeal: @escaping () -> Void,
+        forecastReview: ForecastReview? = nil
     ) {
+        self.forecastReview = forecastReview
         self.windowLabel = windowLabel
         self.readings = readings
         self.doses = doses
@@ -342,6 +346,29 @@ public struct GlanceDetails: View {
                             onAccept: { onAccept(suggestion) },
                             onDismiss: { onDismiss(suggestion) }
                         )
+                    }
+                }
+            }
+            if let review = forecastReview, let card = review.trackRecord, let line = card.summaryLine {
+                group("Forecast accuracy · last \(trackRecordDays) days") {
+                    Button {
+                        withAnimation(.snappy(duration: 0.2)) { showsAccuracy.toggle() }
+                    } label: {
+                        HStack(alignment: .firstTextBaseline, spacing: 6) {
+                            Text(line)
+                                .multilineTextAlignment(.leading)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Spacer(minLength: 0)
+                            Image(systemName: "chevron.down")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                                .rotationEffect(.degrees(showsAccuracy ? 0 : -90))
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    if showsAccuracy {
+                        ForecastAccuracyBreakdown(scorecard: card, isReplayed: review.isReplayed)
                     }
                 }
             }
