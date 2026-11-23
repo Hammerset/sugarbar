@@ -38,10 +38,40 @@ public struct TherapyLearning: Equatable, Sendable, Codable {
 }
 
 public extension TherapySettings {
+    /// Setting a timing or factor to nil leaves it unchanged: only sensitivity and carb ratio can be unset.
     subscript(quantity: TherapyQuantity) -> Double? {
-        get { quantity == .carbRatio ? carbRatio : insulinSensitivity }
+        get {
+            switch quantity {
+            case .insulinSensitivity: insulinSensitivity
+            case .carbRatio: carbRatio
+            case .insulinPeak: insulinPeak
+            case .insulinDuration: insulinDuration
+            case .fastCarbAbsorption: fastCarbAbsorptionTime
+            case .normalCarbAbsorption: carbAbsorptionTime
+            case .slowCarbAbsorption: slowCarbAbsorptionTime
+            case .trendBlend: trendBlendDuration
+            case .slowestCarbFactor: slowestCarbFactor
+            case .fastestCarbFactor: fastestCarbFactor
+            }
+        }
         set {
-            if quantity == .carbRatio { carbRatio = newValue } else { insulinSensitivity = newValue }
+            switch quantity {
+            case .insulinSensitivity: insulinSensitivity = newValue
+            case .carbRatio: carbRatio = newValue
+            default:
+                guard let newValue else { return }
+                switch quantity {
+                case .insulinPeak: insulinPeak = newValue
+                case .insulinDuration: insulinDuration = newValue
+                case .fastCarbAbsorption: fastCarbAbsorptionTime = newValue
+                case .normalCarbAbsorption: carbAbsorptionTime = newValue
+                case .slowCarbAbsorption: slowCarbAbsorptionTime = newValue
+                case .trendBlend: trendBlendDuration = newValue
+                case .slowestCarbFactor: slowestCarbFactor = newValue
+                case .fastestCarbFactor: fastestCarbFactor = newValue
+                case .insulinSensitivity, .carbRatio: break
+                }
+            }
         }
     }
 }
@@ -49,8 +79,13 @@ public extension TherapySettings {
 public extension Settings {
     /// Suggestions the user has not dismissed; a dismissed one returns once the estimate moves
     /// more than the Suggestion margin away from the value dismissed.
-    func visibleSuggestions(_ estimate: TherapyEstimate?, margin: Double = TherapyEstimationOptions.default.suggestionMargin) -> [TherapySuggestion] {
-        (estimate?.suggestions ?? []).filter { suggestion in
+    func visibleSuggestions(
+        _ estimate: TherapyEstimate?,
+        forecastLearning: ForecastLearning? = nil,
+        margin: Double = TherapyEstimationOptions.default.suggestionMargin
+    ) -> [TherapySuggestion] {
+        let forecastSuggestions = (forecastLearning?.suggestions ?? []).filter { therapy.isValidAccepting($0) }
+        return ((estimate?.suggestions ?? []) + forecastSuggestions).filter { suggestion in
             guard therapy[suggestion.quantity] != suggestion.suggested else { return false }
             guard let dismissed = therapyLearning.dismissed[suggestion.quantity] else { return true }
             return abs(log(suggestion.suggested / dismissed)) > log(1 + margin)
@@ -58,6 +93,7 @@ public extension Settings {
     }
 
     func accepting(_ suggestion: TherapySuggestion, at date: Date) -> Settings {
+        guard therapy.isValidAccepting(suggestion) else { return self }
         var updated = self
         updated.therapy[suggestion.quantity] = suggestion.suggested
         updated.therapyLearning.dismissed[suggestion.quantity] = nil
@@ -77,7 +113,7 @@ public extension Settings {
         return updated
     }
 
-    /// Saves hand-edited Therapy Settings, logging any change to sensitivity or carb ratio.
+    /// Saves hand-edited Therapy Settings, logging every changed value.
     func editingTherapy(_ edited: TherapySettings, at date: Date) -> Settings {
         var updated = self
         updated.therapy = edited
@@ -91,5 +127,14 @@ public extension Settings {
             ))
         }
         return updated
+    }
+}
+
+extension TherapySettings {
+    /// A forecast parameter Suggestion made against other values can break the settings' own rules.
+    func isValidAccepting(_ suggestion: TherapySuggestion) -> Bool {
+        var updated = self
+        updated[suggestion.quantity] = suggestion.suggested
+        return updated.isValid
     }
 }

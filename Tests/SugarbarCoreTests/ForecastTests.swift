@@ -194,9 +194,9 @@ import Testing
         let asModelled = try #require(run(readings(slopePerMinute: 60 * 2.5 / 10 / 180), meals: meals))
         #expect(asModelled.carbAbsorptionFactor == 1)
         let falling = try #require(run(readings(slopePerMinute: -0.03), meals: meals))
-        #expect(falling.carbAbsorptionFactor < 0.6 && falling.carbAbsorptionFactor >= carbAbsorptionFactorRange.lowerBound)
+        #expect(falling.carbAbsorptionFactor < 0.6 && falling.carbAbsorptionFactor >= TherapySettings.default.slowestCarbFactor)
         let rising = try #require(run(readings(slopePerMinute: 0.2), meals: meals))
-        #expect(rising.carbAbsorptionFactor == carbAbsorptionFactorRange.upperBound)
+        #expect(rising.carbAbsorptionFactor == TherapySettings.default.fastestCarbFactor)
         let noCarbs = try #require(run(readings(slopePerMinute: -0.03)))
         #expect(noCarbs.carbAbsorptionFactor == 1)
     }

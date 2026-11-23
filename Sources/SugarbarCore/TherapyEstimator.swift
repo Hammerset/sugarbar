@@ -3,6 +3,74 @@ import Foundation
 public enum TherapyQuantity: String, Codable, Sendable, CaseIterable {
     case insulinSensitivity
     case carbRatio
+    case insulinPeak
+    case insulinDuration
+    case fastCarbAbsorption
+    case normalCarbAbsorption
+    case slowCarbAbsorption
+    case trendBlend
+    case slowestCarbFactor
+    case fastestCarbFactor
+
+    /// Learned from Episodes by `estimateTherapy`; the rest are learned by replaying the Forecast.
+    public static let learnedFromEpisodes: [TherapyQuantity] = [.insulinSensitivity, .carbRatio]
+    public static let forecastParameters: [TherapyQuantity] = allCases.filter { !learnedFromEpisodes.contains($0) }
+
+    public var name: String {
+        switch self {
+        case .insulinSensitivity: "Insulin sensitivity"
+        case .carbRatio: "Carb ratio"
+        case .insulinPeak: "Insulin peak"
+        case .insulinDuration: "Insulin duration"
+        case .fastCarbAbsorption: "Fast carb absorption"
+        case .normalCarbAbsorption: "Normal carb absorption"
+        case .slowCarbAbsorption: "Slow carb absorption"
+        case .trendBlend: "Trend blend"
+        case .slowestCarbFactor: "Slowest carb correction"
+        case .fastestCarbFactor: "Fastest carb correction"
+        }
+    }
+
+    public var carbAbsorption: CarbAbsorption? {
+        switch self {
+        case .fastCarbAbsorption: .fast
+        case .normalCarbAbsorption: .normal
+        case .slowCarbAbsorption: .slow
+        default: nil
+        }
+    }
+
+    /// The value as the settings show it: "1 u per 8 g", "60 min", "4.5 h", "0.25×".
+    public func format(_ value: Double) -> String {
+        switch self {
+        case .insulinSensitivity, .carbRatio: formatTherapyValue(value, self)
+        case .insulinPeak, .trendBlend: "\(Int((value / 60).rounded())) min"
+        case .insulinDuration, .fastCarbAbsorption, .normalCarbAbsorption, .slowCarbAbsorption: "\(formatHoursValue(value)) h"
+        case .slowestCarbFactor, .fastestCarbFactor: "\(formatFactor(value))×"
+        }
+    }
+
+    /// The bare number in the setting's own unit, for the Change Log.
+    public func formatNumber(_ value: Double) -> String {
+        switch self {
+        case .insulinSensitivity, .carbRatio: formatTherapyNumber(value)
+        default: format(value)
+        }
+    }
+}
+
+func formatHoursValue(_ seconds: TimeInterval) -> String {
+    let hours = seconds / 3600
+    let rounded = (hours * 100).rounded() / 100
+    if rounded == rounded.rounded() { return String(format: "%.0f", rounded) }
+    if (rounded * 10) == (rounded * 10).rounded() { return String(format: "%.1f", rounded) }
+    return String(format: "%.2f", rounded)
+}
+
+func formatFactor(_ value: Double) -> String {
+    let rounded = (value * 100).rounded() / 100
+    if (rounded * 10) == (rounded * 10).rounded() { return String(format: "%.1f", rounded) }
+    return String(format: "%.2f", rounded)
 }
 
 public enum TimeOfDay: String, Codable, Sendable, CaseIterable {
@@ -133,18 +201,48 @@ public struct TherapySuggestion: Equatable, Sendable {
     public let episodeCount: Int
     public let days: Int
 
+    public init(quantity: TherapyQuantity, current: Double?, suggested: Double, episodeCount: Int, days: Int) {
+        self.quantity = quantity
+        self.current = current
+        self.suggested = suggested
+        self.episodeCount = episodeCount
+        self.days = days
+    }
+
     public var evidence: String {
-        let noun = quantity == .carbRatio ? (episodeCount == 1 ? "meal" : "meals") : (episodeCount == 1 ? "correction" : "corrections")
-        return "\(episodeCount) \(noun) in the last \(days) \(days == 1 ? "day" : "days")"
+        let window = "in the last \(days) \(days == 1 ? "day" : "days")"
+        if quantity == .trendBlend { return "forecasts on \(episodeCount) \(episodeCount == 1 ? "day" : "days") \(window)" }
+        let noun: String = switch quantity {
+        case .insulinSensitivity, .insulinPeak, .insulinDuration: episodeCount == 1 ? "correction" : "corrections"
+        case .carbRatio, .slowestCarbFactor, .fastestCarbFactor: episodeCount == 1 ? "meal" : "meals"
+        case .fastCarbAbsorption, .normalCarbAbsorption, .slowCarbAbsorption:
+            "\(quantity.carbAbsorption?.label.lowercased() ?? "") \(episodeCount == 1 ? "meal" : "meals")"
+        case .trendBlend: ""
+        }
+        return "\(episodeCount) \(noun) \(window)"
     }
 
     public var text: String {
-        let name = quantity == .carbRatio ? "Carb ratio" : "Insulin sensitivity"
-        let value = formatTherapyValue(suggested, quantity)
-        if let current {
-            return "\(name) looks closer to \(value) (now \(formatTherapyNumber(current))), from \(evidence)."
+        let value = quantity.format(suggested)
+        guard let current else { return "\(quantity.name) looks like about \(value), from \(evidence)." }
+        let now = quantity.format(current)
+        switch quantity {
+        case .insulinSensitivity, .carbRatio:
+            return "\(quantity.name) looks closer to \(value) (now \(formatTherapyNumber(current))), from \(evidence)."
+        case .insulinPeak:
+            return "Your insulin seems to peak around \(value), not \(now), from \(evidence)."
+        case .insulinDuration:
+            return "Your insulin seems to finish acting after about \(value), not \(now), from \(evidence)."
+        case .fastCarbAbsorption, .normalCarbAbsorption, .slowCarbAbsorption:
+            let label = quantity.carbAbsorption?.label ?? ""
+            return "\(label) meals seem to absorb over about \(value), not \(now), from \(evidence)."
+        case .trendBlend:
+            return "The Forecast predicts better when the CGM trend fades over \(value), not \(now), from \(evidence)."
+        case .slowestCarbFactor:
+            return "The Forecast predicts better when it may slow carbs to \(value), not \(now), from \(evidence)."
+        case .fastestCarbFactor:
+            return "The Forecast predicts better when it may speed carbs up to \(value), not \(now), from \(evidence)."
         }
-        return "\(name) looks like about \(value), from \(evidence)."
     }
 }
 
