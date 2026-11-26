@@ -160,6 +160,6 @@ private struct Noise {
         #expect(peaks.allSatisfy { abs($0 - therapy.insulinPeak) <= 0.2 * therapy.insulinPeak })
         #expect(peaks.allSatisfy { $0 < 120 * 60 && $0.truncatingRemainder(dividingBy: 300) == 0 })
         let durations = candidateValues(.insulinDuration, current: therapy.insulinDuration, therapy: therapy, maximumStep: 0.2)
-        #expect(durations.allSatisfy { $0 > 2 * therapy.insulinPeak && $0 >= 4 * 3600 })
+        #expect(durations.allSatisfy { $0 > 2 * therapy.insulinPeak && TherapySettings.insulinDurationRange.contains($0) })
     }
 }
