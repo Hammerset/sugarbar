@@ -25,15 +25,27 @@ public struct TherapyLearning: Equatable, Sendable, Codable {
     public var changes: [TherapyChange]
     public var dismissed: [TherapyQuantity: Double]
     public var excludedDays: [ExcludedDay]
+    /// Every set of Therapy Settings in place since versions were kept, oldest first.
+    public var versions: [TherapyVersion]
+    /// The values of the last Calibration proposal rejected, so it is not offered again.
+    public var rejectedProposal: [TherapyQuantity: Double]?
 
-    public init(changes: [TherapyChange] = [], dismissed: [TherapyQuantity: Double] = [:], excludedDays: [ExcludedDay] = ExcludedDay.preMarked) {
+    public init(
+        changes: [TherapyChange] = [],
+        dismissed: [TherapyQuantity: Double] = [:],
+        excludedDays: [ExcludedDay] = ExcludedDay.preMarked,
+        versions: [TherapyVersion] = [],
+        rejectedProposal: [TherapyQuantity: Double]? = nil
+    ) {
         self.changes = changes
         self.dismissed = dismissed
         self.excludedDays = excludedDays
+        self.versions = versions
+        self.rejectedProposal = rejectedProposal
     }
 
     private enum CodingKeys: String, CodingKey {
-        case changes, dismissed, excludedDays
+        case changes, dismissed, excludedDays, versions, rejectedProposal
     }
 
     /// Learning saved before days could be excluded starts from the pre-marked ones.
@@ -42,7 +54,9 @@ public struct TherapyLearning: Equatable, Sendable, Codable {
         self.init(
             changes: try container.decode([TherapyChange].self, forKey: .changes),
             dismissed: try container.decode([TherapyQuantity: Double].self, forKey: .dismissed),
-            excludedDays: try container.decodeIfPresent([ExcludedDay].self, forKey: .excludedDays) ?? ExcludedDay.preMarked
+            excludedDays: try container.decodeIfPresent([ExcludedDay].self, forKey: .excludedDays) ?? ExcludedDay.preMarked,
+            versions: try container.decodeIfPresent([TherapyVersion].self, forKey: .versions) ?? [],
+            rejectedProposal: try container.decodeIfPresent([TherapyQuantity: Double].self, forKey: .rejectedProposal)
         )
     }
 
@@ -127,6 +141,7 @@ public extension Settings {
             new: suggestion.suggested,
             evidence: "Suggested from \(suggestion.evidence)"
         ))
+        updated.therapyLearning.recordVersion(updated.therapy, previous: therapy, at: date, evidence: "Suggested from \(suggestion.evidence)")
         return updated
     }
 
@@ -136,20 +151,9 @@ public extension Settings {
         return updated
     }
 
-    /// Saves hand-edited Therapy Settings, logging every changed value.
+    /// Saves hand-edited Therapy Settings, logging every changed value and keeping a version.
     func editingTherapy(_ edited: TherapySettings, at date: Date) -> Settings {
-        var updated = self
-        updated.therapy = edited
-        for quantity in TherapyQuantity.allCases where therapy[quantity] != edited[quantity] {
-            updated.therapyLearning.record(TherapyChange(
-                date: date,
-                quantity: quantity,
-                old: therapy[quantity],
-                new: edited[quantity],
-                evidence: "Entered by hand"
-            ))
-        }
-        return updated
+        replacingTherapy(with: edited, at: date, evidence: "Entered by hand")
     }
 }
 

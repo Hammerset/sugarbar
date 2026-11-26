@@ -346,3 +346,25 @@ func quietDrift(_ timeline: CalibrationTimeline, boluses: [InsulinDose], calenda
         episodes: night.count + day.count
     )
 }
+
+/// The calibration over History with the settings and excluded days in place, searching only
+/// within `maximumStep` of them: what a proposal can reach, at a fraction of the work.
+public func calibrateForecast(history: HistoryStore, meals: [Meal], settings: Settings, now: Date = Date(), options: CalibrationOptions = .default) -> CalibrationReport? {
+    let therapy = settings.therapy
+    guard therapy.isComplete, therapy.isValid, let sensitivity = therapy.insulinSensitivity else { return nil }
+    let data = CalibrationData(history: history, meals: meals, thresholds: settings.thresholds, lookback: options.lookback, now: now)
+    return calibrateForecast(data, therapy: therapy, excludedDays: settings.therapyLearning.excludedDays, options: options.within(maximumStepOf: therapy, sensitivity: sensitivity))
+}
+
+extension CalibrationOptions {
+    func within(maximumStepOf therapy: TherapySettings, sensitivity: Double) -> CalibrationOptions {
+        func near(_ value: Double, _ current: Double) -> Bool { abs(value - current) <= maximumStep * current + 1e-9 }
+        var boxed = self
+        boxed.peaks = peaks.filter { near($0, therapy.insulinPeak) }
+        boxed.durations = durations.filter { near($0, therapy.insulinDuration) }
+        boxed.sensitivities = sensitivities.filter { near($0, sensitivity) }
+        boxed.carbRatioShares = carbRatioShares.filter { near($0, 1) }
+        boxed.absorptionTimes = absorptionTimes.filter { near($0, therapy.carbAbsorptionTime) }
+        return boxed
+    }
+}

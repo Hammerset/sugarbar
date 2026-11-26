@@ -52,11 +52,50 @@ struct TherapySettingsView: View {
                 Text(TherapyEstimateRows.note)
             }
             Section {
+                CalibrationProposalRows(
+                    report: model.calibration,
+                    proposal: model.calibrationProposal,
+                    isCalibrating: model.isCalibrating,
+                    onCalibrate: model.recalibrate,
+                    onApprove: { proposal in
+                        model.approveCalibration(proposal)
+                        therapy = model.settings.therapy
+                    },
+                    onReject: model.rejectCalibration
+                )
+            } header: {
+                Text("Forecast Calibration")
+            } footer: {
+                Text(CalibrationProposalRows.note)
+            }
+            Section {
+                ExcludedDaysRows(days: model.settings.therapyLearning.excludedDays, onSet: model.setExcludedDay)
+            } header: {
+                Text("Days Left Out of Calibration")
+            } footer: {
+                Text(ExcludedDaysRows.note)
+            }
+            Section {
                 ForecastLearningRows(learning: model.forecastReview?.learning)
             } header: {
                 Text("Forecast Timing Learned from History")
             } footer: {
                 Text(ForecastLearningRows.note)
+            }
+            Section {
+                TherapyVersionRows(
+                    versions: model.settings.therapyLearning.versions,
+                    current: model.settings.therapy,
+                    scores: model.versionScores,
+                    onRollBack: { version in
+                        model.rollBack(to: version)
+                        therapy = model.settings.therapy
+                    }
+                )
+            } header: {
+                Text("Therapy Settings Versions")
+            } footer: {
+                Text(TherapyVersionRows.note)
             }
             Section("Therapy Changes") {
                 TherapyChangeLogRows(changes: model.settings.therapyLearning.changes)
@@ -65,7 +104,10 @@ struct TherapySettingsView: View {
         .navigationTitle("Therapy Settings")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden()
-        .task { model.refreshTherapyEstimateIfDue() }
+        .task {
+            model.refreshTherapyEstimateIfDue()
+            model.refreshCalibrationIfDue()
+        }
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button("Cancel") { dismiss() }
