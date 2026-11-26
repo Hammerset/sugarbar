@@ -19,14 +19,37 @@ public struct TherapyChange: Equatable, Sendable, Codable, Identifiable {
     }
 }
 
-/// What the user did with Suggestions: the Change Log, and the value last dismissed per quantity.
+/// What the user did with Suggestions: the Change Log, the value last dismissed per quantity,
+/// and the days left out of calibrating the Forecast.
 public struct TherapyLearning: Equatable, Sendable, Codable {
     public var changes: [TherapyChange]
     public var dismissed: [TherapyQuantity: Double]
+    public var excludedDays: [ExcludedDay]
 
-    public init(changes: [TherapyChange] = [], dismissed: [TherapyQuantity: Double] = [:]) {
+    public init(changes: [TherapyChange] = [], dismissed: [TherapyQuantity: Double] = [:], excludedDays: [ExcludedDay] = ExcludedDay.preMarked) {
         self.changes = changes
         self.dismissed = dismissed
+        self.excludedDays = excludedDays
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case changes, dismissed, excludedDays
+    }
+
+    /// Learning saved before days could be excluded starts from the pre-marked ones.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            changes: try container.decode([TherapyChange].self, forKey: .changes),
+            dismissed: try container.decode([TherapyQuantity: Double].self, forKey: .dismissed),
+            excludedDays: try container.decodeIfPresent([ExcludedDay].self, forKey: .excludedDays) ?? ExcludedDay.preMarked
+        )
+    }
+
+    /// Marks `day` excluded for `reason`, or clears it with nil.
+    public mutating func setExcluded(_ day: String, reason: ExcludedDay.Reason?) {
+        excludedDays.removeAll { $0.day == day }
+        if let reason { excludedDays = (excludedDays + [ExcludedDay(day: day, reason: reason)]).sorted { $0.day < $1.day } }
     }
 
     public static let `default` = TherapyLearning()
