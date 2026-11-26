@@ -66,6 +66,9 @@ public struct CalibrationEpisodeRules: Equatable, Sendable {
     /// is what the Bolus corrected, not carbs: only the rise itself is excluded.
     public var correctionAfterRise: TimeInterval = 30 * 60
     public var riseAfterCorrection: TimeInterval = 45 * 60
+    /// A Bolus with no Meal logged that, with the insulin already on board, would take glucose
+    /// below this by the current sensitivity was for carbs nobody logged.
+    public var correctionFloor = 2.0
 
     public init() {}
 
@@ -223,14 +226,24 @@ public func labelCalibrationEpisodes(
             runs.append((date.addingTimeInterval(-rules.riseWindow), date))
         }
     }
-    for run in runs {
+    var unlogged: [ClosedRange<Date>] = runs.map { run in
         let correctsIt = boluses.contains { bolus in
             bolus.timestamp >= run.start && bolus.timestamp <= run.end.addingTimeInterval(rules.correctionAfterRise)
                 && run.end <= bolus.timestamp.addingTimeInterval(rules.riseAfterCorrection)
         }
-        let until = correctsIt ? run.end : run.end.addingTimeInterval(rules.unloggedCarbTail)
-        let first = readings.partitioningIndex { $0.timestamp >= run.start }
-        let last = readings.partitioningIndex { $0.timestamp > until }
+        return run.start...(correctsIt ? run.end : run.end.addingTimeInterval(rules.unloggedCarbTail))
+    }
+    for bolus in boluses where context(at: bolus.timestamp) == .correction {
+        guard let glucose = actualGlucose(at: bolus.timestamp, sortedReadings: readings) else { continue }
+        let onBoard = within(boluses, \.timestamp, bolus.timestamp.addingTimeInterval(-therapy.insulinDuration)...bolus.timestamp)
+            .reduce(0) { $0 + $1.units * model.remainingFraction(after: bolus.timestamp.timeIntervalSince($1.timestamp)) }
+        if glucose - onBoard * sensitivity < rules.correctionFloor {
+            unlogged.append(bolus.timestamp...bolus.timestamp.addingTimeInterval(rules.eventWindow))
+        }
+    }
+    for window in unlogged {
+        let first = readings.partitioningIndex { $0.timestamp >= window.lowerBound }
+        let last = readings.partitioningIndex { $0.timestamp > window.upperBound }
         for index in first..<max(first, last) where labels[index] != .excluded(.excludedDay) && contexts[index] != .meal {
             labels[index] = .excluded(.unloggedCarbs)
         }

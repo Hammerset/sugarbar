@@ -110,8 +110,8 @@ extension Calendar {
     }
 
     @Test func aRiseDespiteInsulinOnlyAFittingModelCannotExplainStillNeedsARealRise() {
-        let tooStrong = TherapySettings(insulinSensitivity: 6, carbRatio: 10, insulinDuration: 5 * 3600)
-        let history = SyntheticHistory(boluses: [(1, 2)], extra: { hour in hour < 2 ? 0 : 0.6 * min(hour - 2, 1) })
+        let tooStrong = TherapySettings(insulinSensitivity: 4.5, carbRatio: 10, insulinDuration: 5 * 3600)
+        let history = SyntheticHistory(boluses: [(1, 1)], extra: { hour in hour < 2 ? 0 : 0.6 * min(hour - 2, 1) })
         #expect(!history.labels(believing: tooStrong).labels.contains(.excluded(.unloggedCarbs)))
     }
 
@@ -125,6 +125,17 @@ extension Calendar {
         let timeline = history.labels()
         #expect(label(timeline, history, at: 3.4) == .excluded(.unloggedCarbs))
         #expect(label(timeline, history, at: 4) == .episode(.correction))
+    }
+
+    @Test func aBolusThatWouldTakeGlucoseBelowTwoWithoutFoodWasForUnloggedCarbs() {
+        let mealSized = SyntheticHistory(boluses: [(2, 2.5)], rises: [(2.25, 7.5)])
+        let timeline = mealSized.labels()
+        #expect(label(timeline, mealSized, at: 2) == .excluded(.unloggedCarbs))
+        #expect(label(timeline, mealSized, at: 6.9) == .excluded(.unloggedCarbs))
+        #expect(label(timeline, mealSized, at: 7.5) == .episode(.quiet))
+
+        let correction = SyntheticHistory(boluses: [(2, 1.5)])
+        #expect(label(correction.labels(), correction, at: 2) == .episode(.correction))
     }
 
     @Test func aMarkedDayIsExcludedWhole() {
