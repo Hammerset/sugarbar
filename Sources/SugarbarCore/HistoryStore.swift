@@ -179,7 +179,7 @@ public final class FileHistoryStore: HistoryStore, @unchecked Sendable {
 
     public func allDoses() -> [InsulinDose] {
         lock.withLock {
-            storedMonths(prefix: "doses-").flatMap { loadedDoses($0).values }.sorted { $0.timestamp < $1.timestamp }
+            storedMonths(prefix: "doses-").flatMap { loadedDoses($0).values }.chronological()
         }
     }
 
@@ -325,7 +325,7 @@ public final class InMemoryHistoryStore: HistoryStore, @unchecked Sendable {
     }
 
     public func allDoses() -> [InsulinDose] {
-        lock.withLock { storedDoses.values.sorted { $0.timestamp < $1.timestamp } }
+        lock.withLock { storedDoses.values.chronological() }
     }
 
     public func earliestReadingDate() -> Date? { lock.withLock { storedReadings.first?.timestamp } }

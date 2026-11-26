@@ -93,7 +93,14 @@ func numberingSameTimeDoses(_ doses: [InsulinDose]) -> [InsulinDose] {
                 InsulinDose(kind: dose.kind, units: dose.units, timestamp: dose.timestamp, insulinName: dose.insulinName, deviceName: dose.deviceName, occurrence: index)
             }
     }
-    .sorted { ($0.timestamp, $0.id) < ($1.timestamp, $1.id) }
+    .chronological()
+}
+
+extension Sequence<InsulinDose> {
+    /// Doses can share a timestamp, and stores hold them in a `Dictionary`: the id breaks the tie.
+    func chronological() -> [InsulinDose] {
+        sorted { ($0.timestamp, $0.id) < ($1.timestamp, $1.id) }
+    }
 }
 
 /// A manual Dose stands in for its Pen Dose until Glooko has it: a Glooko Dose of the same kind and
@@ -118,14 +125,14 @@ public func reconcileDoses(_ doses: [InsulinDose], tolerance: TimeInterval = man
     }
     var supersededManual: Set<String> = []
     var usedGlooko: Set<String> = []
-    for pair in candidates.sorted(by: { $0.gap < $1.gap })
+    for pair in candidates.sorted(by: { ($0.gap, $0.manual, $0.glooko) < ($1.gap, $1.manual, $1.glooko) })
     where !supersededManual.contains(pair.manual) && !usedGlooko.contains(pair.glooko) {
         supersededManual.insert(pair.manual)
         usedGlooko.insert(pair.glooko)
     }
     return doses
         .filter { !supersededManual.contains($0.id) }
-        .sorted { $0.timestamp < $1.timestamp }
+        .chronological()
 }
 
 /// Every dose within `tolerance` of a hovered date, oldest first.
