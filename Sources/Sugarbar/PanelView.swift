@@ -20,6 +20,7 @@ struct PanelView: View {
     @State private var headerHeight: CGFloat = 0
     @State private var contentHeight: CGFloat = 0
     @State private var footerHeight: CGFloat = 0
+    @State private var copiedNote: String?
 
     private var thresholds: Thresholds { model.thresholds }
     private var series: [Reading] { model.chartSeries(window: window) }
@@ -60,7 +61,10 @@ struct PanelView: View {
                     .font(.callout)
             }
             chart
-            RangeSelector(selection: $window)
+            HStack(spacing: 6) {
+                RangeSelector(selection: $window)
+                CopyForClaudeButton(copied: copiedNote, onCopy: copyForClaude)
+            }
             ForecastCaption(forecast: model.forecast, therapyComplete: model.settings.therapy.isComplete)
                 .font(.caption)
                 .fixedSize(horizontal: false, vertical: true)
@@ -132,6 +136,19 @@ struct PanelView: View {
         }
     }
 
+    private func copyForClaude(includesQuestion: Bool) {
+        let text = model.claudeSnapshot(window: window, includesQuestion: includesQuestion)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+        let note = includesQuestion ? "Copied with a question" : "Copied for Claude"
+        withAnimation(.snappy(duration: 0.15)) { copiedNote = note }
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(1.6))
+            guard copiedNote == note else { return }
+            withAnimation(.easeOut(duration: 0.3)) { copiedNote = nil }
+        }
+    }
+
     private var header: some View {
         HStack(alignment: .center, spacing: 8) {
             GlucoseReadout(content: model.content, size: 44)
@@ -172,6 +189,9 @@ struct PanelView: View {
                     .askClaude(onAskClaude),
                 ])
                 Menu {
+                    Button("Copy for Claude") { copyForClaude(includesQuestion: false) }
+                    Button("Copy for Claude with a Dose Question") { copyForClaude(includesQuestion: true) }
+                    Divider()
                     Button("Settings…", action: onOpenSettings)
                     Divider()
                     Button("Quit Sugarbar") { NSApplication.shared.terminate(nil) }
@@ -187,6 +207,47 @@ struct PanelView: View {
             }
         }
         .padding([.horizontal, .bottom], Self.padding)
+    }
+}
+
+/// Copies the Claude Snapshot of the selected range; the note confirms it over the range selector's row.
+private struct CopyForClaudeButton: View {
+    let copied: String?
+    let onCopy: (_ includesQuestion: Bool) -> Void
+
+    var body: some View {
+        Button { onCopy(false) } label: {
+            Image(systemName: copied == nil ? "doc.on.clipboard" : "checkmark")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(copied == nil ? Color.secondary : Color.green)
+                .frame(width: 30, height: 26)
+                .background(Color.primary.opacity(0.07), in: RoundedRectangle(cornerRadius: 7))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("Copy this range for a Claude chat")
+        .accessibilityLabel("Copy for Claude")
+        .contextMenu {
+            Button("Copy for Claude") { onCopy(false) }
+            Button("Copy for Claude with a Dose Question") { onCopy(true) }
+        }
+        .overlay(alignment: .trailing) {
+            if let copied {
+                Text(copied)
+                    .font(.caption.weight(.medium))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background {
+                        Capsule()
+                            .fill(Color(nsColor: .controlBackgroundColor))
+                            .shadow(color: .black.opacity(0.2), radius: 2, y: 1)
+                    }
+                    .fixedSize()
+                    .offset(x: -36)
+                    .transition(.opacity)
+                    .allowsHitTesting(false)
+            }
+        }
     }
 }
 

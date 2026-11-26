@@ -156,6 +156,10 @@ _Avoid_: COB in UI text, active carbs.
 The compact text account of recent **History**, **Doses**, **Meals** (with fat and protein, and open **Meal Plans** marked as not eaten), the dose calculation behind the **Suggested Dose**, thresholds, **Therapy Settings**, **Learned Estimates**, the **Change Log**, the Forecast's **Track Record** and pending Suggestions that Ask Claude sends to Claude: the last 24 hours at 15-minute resolution with every event, one line per day, and a median-by-hour profile, in mmol/L and local time. Built once per conversation.
 _Avoid_: export, report, dump.
 
+**Claude Snapshot**:
+The plain-text account of the chart's selected range that **Copy for Claude** puts on the clipboard for pasting into a Claude chat: glucose now and in view (thinned by range), every **Dose** and **Meal** (open **Meal Plans** apart), **Insulin on Board**, **Carbs on Board**, the **Forecast**, **Therapy Settings**, **Dose Settings** and pending Suggestions. Optionally led by a request for a dose estimate. The app sends it nowhere.
+_Avoid_: export, report, dump.
+
 **Ask Claude**:
 A chat with Claude about the user's own **History Summary**. Multi-turn within a session, held in memory only. Gives observations and things to discuss with a care team, and may discuss dose amounts with reference to the app's Suggested Dose calculation and the user's working ratio and sensitivity, saying how uncertain they are.
 _Avoid_: assistant, coach, advice.
@@ -202,6 +206,7 @@ _Avoid_: initial import, onboarding.
 - A **Suggestion** changes **Therapy Settings** only when the user accepts it; every accepted or typed change goes in the **Change Log**.
 - A Suggestion from **Replaying** moves a setting at most 20% at a time; while an insulin timing Suggestion is pending, no absorption time is suggested.
 - The **Forecast Log** stays on its device; **Sync** carries the settings it was made with, not the log.
+- A **Claude Snapshot** covers exactly the range selected on the chart; beyond 3 days, days before the last 3 collapse to one line each.
 - An **Ask Claude** conversation is pinned to the **History Summary** built for its first question; Readings that arrive later are not in it until **Start Over**.
 - Meals live in each device's App Group (phone and widget; the Mac on its own). Eaten phone Meals are mirrored to Apple Health (carbs, plus fat, protein and energy when known), and editing or deleting one updates or removes its Health samples; Meal Plans and Mac Meals are not. With **Sync**, a Meal logged on one device reaches the other; the phone mirrors Meals that arrive through Sync to Apple Health too, and the Mac never writes Health. Eaten Meals reach Glooko only through the **Glooko Bridge**, and carbs logged in the Glooko app come back as Meals through it.
 - **Sync** carries thresholds, **Therapy Settings**, **Dose Settings**, alert settings (with a **Snooze**) and the **Change Log**; poll cadence, the followed connection, sign-ins, API keys and each device's record of posted **Alerts** stay per device.
