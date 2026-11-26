@@ -62,11 +62,54 @@ struct TherapySettingsSection: View {
         .task { model.refreshTherapyEstimateIfDue() }
 
         Section {
+            CalibrationProposalRows(
+                report: model.calibration,
+                proposal: model.calibrationProposal,
+                isCalibrating: model.isCalibrating,
+                onCalibrate: model.recalibrate,
+                onApprove: model.approveCalibration,
+                onReject: model.rejectCalibration
+            )
+        } header: {
+            Text("Forecast Calibration")
+        } footer: {
+            Text(CalibrationProposalRows.note)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .task { model.refreshCalibrationIfDue() }
+
+        Section {
+            ExcludedDaysRows(days: model.settings.therapyLearning.excludedDays, onSet: model.setExcludedDay)
+        } header: {
+            Text("Days Left Out of Calibration")
+        } footer: {
+            Text(ExcludedDaysRows.note)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+
+        Section {
             ForecastLearningRows(learning: model.forecastReview?.learning)
         } header: {
             Text("Forecast Timing Learned from History")
         } footer: {
             Text(ForecastLearningRows.note)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+
+        Section {
+            TherapyVersionRows(
+                versions: model.settings.therapyLearning.versions,
+                current: model.settings.therapy,
+                scores: model.versionScores,
+                onRollBack: model.rollBack
+            )
+        } header: {
+            Text("Therapy Settings Versions")
+        } footer: {
+            Text(TherapyVersionRows.note)
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

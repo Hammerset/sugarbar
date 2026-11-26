@@ -19,6 +19,9 @@ final class BarViewModel {
     private(set) var therapyEstimate: TherapyEstimate?
     private(set) var forecastReview: ForecastReview?
     private(set) var isEstimatingTherapy = false
+    private(set) var calibration: CalibrationReport?
+    private(set) var versionScores: [UUID: ForecastScorecard] = [:]
+    private(set) var isCalibrating = false
 
     private let credentialStore: CredentialStore
     private let glookoCredentialStore: CredentialStore
@@ -306,6 +309,53 @@ final class BarViewModel {
 
     func dismissSuggestion(_ suggestion: TherapySuggestion) {
         applySettings(settings.dismissing(suggestion))
+    }
+
+    var calibrationProposal: CalibrationProposal? {
+        settings.visibleProposal(calibration)
+    }
+
+    func refreshCalibrationIfDue() {
+        if let calibration, Date().timeIntervalSince(calibration.computedAt) < therapyEstimateInterval { return }
+        recalibrate()
+    }
+
+    func recalibrate() {
+        guard !isCalibrating else { return }
+        isCalibrating = true
+        let history = historyStore
+        let meals = mealStore.load()
+        let settings = settings
+        let log = forecastLog
+        Task {
+            (calibration, versionScores) = await Task.detached(priority: .utility) {
+                (
+                    calibrateForecast(history: history, meals: meals, settings: settings),
+                    versionAccuracy(settings: settings, history: history, log: log)
+                )
+            }.value
+            isCalibrating = false
+        }
+    }
+
+    func approveCalibration(_ proposal: CalibrationProposal) {
+        applySettings(settings.approving(proposal, at: Date()))
+        recalibrate()
+    }
+
+    func rejectCalibration(_ proposal: CalibrationProposal) {
+        applySettings(settings.rejecting(proposal))
+    }
+
+    func rollBack(to version: TherapyVersion) {
+        applySettings(settings.rollingBack(to: version, at: Date()))
+        recalibrate()
+    }
+
+    func setExcludedDay(_ day: String, reason: ExcludedDay.Reason?) {
+        var updated = settings
+        updated.therapyLearning.setExcluded(day, reason: reason)
+        applySettings(updated)
     }
 
     func saveTherapy(_ therapy: TherapySettings) {
