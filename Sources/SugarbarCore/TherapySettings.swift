@@ -2,7 +2,7 @@ import Foundation
 
 /// The personal factors the Forecast needs. Sensitivity and carb ratio have no defaults:
 /// until the user enters both, there is no Forecast.
-public struct TherapySettings: Equatable, Sendable, Codable {
+public struct TherapySettings: Hashable, Sendable, Codable {
     /// mmol/L that one unit of Bolus insulin lowers glucose by.
     public var insulinSensitivity: Double?
     /// Grams of carbohydrate covered by one unit of Bolus insulin.
@@ -48,7 +48,7 @@ public struct TherapySettings: Equatable, Sendable, Codable {
 
     public static let sensitivityRange: ClosedRange<Double> = 0.2...10
     public static let carbRatioRange: ClosedRange<Double> = 1...100
-    public static let insulinDurationRange: ClosedRange<TimeInterval> = (4 * 3600)...(8 * 3600)
+    public static let insulinDurationRange: ClosedRange<TimeInterval> = (3 * 3600)...(8 * 3600)
     public static let insulinPeakRange: ClosedRange<TimeInterval> = (30 * 60)...(120 * 60)
     public static let carbAbsorptionRange: ClosedRange<TimeInterval> = (30 * 60)...(6 * 3600)
     public static let fastCarbAbsorptionRange: ClosedRange<TimeInterval> = (15 * 60)...(6 * 3600)
@@ -78,7 +78,7 @@ public struct TherapySettings: Equatable, Sendable, Codable {
             return "Carb ratio must be between \(format(Self.carbRatioRange)) g per unit."
         }
         if !Self.insulinDurationRange.contains(insulinDuration) {
-            return "Insulin duration must be between 4 and 8 hours."
+            return "Insulin duration must be between 3 and 8 hours."
         }
         if !Self.insulinPeakRange.contains(insulinPeak) {
             return "Insulin peak must be between 30 and 120 minutes."
