@@ -42,6 +42,7 @@ struct SettingsScreen: View {
                 } header: {
                     Text("Accounts & Sync")
                 }
+                healthSection
                 Section {
                     claudeRow
                 } header: {
@@ -86,6 +87,36 @@ struct SettingsScreen: View {
                     Label("Glooko", systemImage: "drop")
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private var healthSection: some View {
+        if model.healthAccess != .unavailable {
+            Section {
+                LabeledContent {
+                    Text(healthStatus)
+                } label: {
+                    Label("Save Meals", systemImage: "heart")
+                }
+                if model.healthAccess == .notDetermined {
+                    Button("Allow Saving to Apple Health") { Task { await model.authorizeHealth() } }
+                }
+            } header: {
+                Text("Apple Health")
+            } footer: {
+                if model.healthAccess == .denied {
+                    Text("Meals stay in Sugarbar but are not saved to Apple Health. Turn on Carbohydrates in the Health app under Sharing › Apps › Sugarbar.")
+                }
+            }
+        }
+    }
+
+    private var healthStatus: String {
+        switch model.healthAccess {
+        case .allowed: "On"
+        case .denied: "Off"
+        case .notDetermined, .unavailable: "Not set up"
         }
     }
 
