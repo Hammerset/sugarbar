@@ -328,6 +328,16 @@ func candidateValues(_ quantity: TherapyQuantity, current: Double, therapy: Ther
     }
 }
 
+/// In-range Readings in `interval`, at least `spacing` apart.
+func replayTimes(_ readings: [Reading], in interval: ClosedRange<Date>, spacing: TimeInterval) -> [Date] {
+    var times: [Date] = []
+    for reading in readings where interval.contains(reading.timestamp) && reading.outOfRange == nil {
+        if let last = times.last, reading.timestamp.timeIntervalSince(last) < spacing { continue }
+        times.append(reading.timestamp)
+    }
+    return times
+}
+
 /// Past moments to replay the Forecast at, with what History knew then.
 struct ForecastReplay {
     let readings: [Reading]
@@ -338,18 +348,21 @@ struct ForecastReplay {
     let times: [Date]
 
     init(readings: [Reading], doses: [InsulinDose], meals: [Meal], thresholds: Thresholds, now: Date, options: ForecastLearningOptions) {
+        let from = now.addingTimeInterval(-options.lookback)
+        let until = now.addingTimeInterval(-max(options.settleTime, 2 * 3600))
+        self.init(
+            readings: readings, doses: doses, meals: meals, thresholds: thresholds, now: now,
+            times: replayTimes(readings, in: from...max(from, until), spacing: options.sampleSpacing)
+        )
+    }
+
+    /// Expects `readings`, `doses` (Boluses) and eaten `meals` sorted by time.
+    init(readings: [Reading], doses: [InsulinDose], meals: [Meal], thresholds: Thresholds, now: Date, times: [Date]) {
         self.readings = readings
         self.doses = doses
         self.meals = meals
         self.thresholds = thresholds
         self.now = now
-        let from = now.addingTimeInterval(-options.lookback)
-        let until = now.addingTimeInterval(-max(options.settleTime, 2 * 3600))
-        var times: [Date] = []
-        for reading in readings where reading.timestamp >= from && reading.timestamp <= until && reading.outOfRange == nil {
-            if let last = times.last, reading.timestamp.timeIntervalSince(last) < options.sampleSpacing { continue }
-            times.append(reading.timestamp)
-        }
         self.times = times
     }
 
