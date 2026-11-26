@@ -48,7 +48,7 @@ struct ReadingsReply: Decodable {
 }
 
 struct DosesReply: Decodable {
-    struct Item: Decodable { let id: String; let t: Int64; let payload: JSONValue }
+    struct Item: Decodable { let id: String; let t: Int64; let payload: JSONValue; let deleted: Bool? }
     let doses: [Item]
     let hasMore: Bool
 }

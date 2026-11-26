@@ -97,7 +97,7 @@ The durable record of Readings and Doses kept on each device, never pruned. Fed 
 _Avoid_: log, archive, cache, database.
 
 **Backfill**:
-Readings and Doses pulled from Glooko into History for times the app was not polling — the past 90 days on first sign-in, then whatever Glooko has gained since. Glooko only learns about Readings hours after the sensor, so LibreLinkUp stays the live source and Backfill fills the gaps.
+Readings and Doses pulled from Glooko into History for times the app was not polling — the past 90 days on first sign-in, then whatever Glooko has gained since. Glooko only learns about Readings hours after the sensor, so LibreLinkUp stays the live source and Backfill fills the gaps. Every Glooko read is the truth for its time span: a Glooko Dose that Glooko no longer returns there (deleted, or a Pen dose marked as priming) is removed from History, unless the read failed or came back without any Doses. Each read covers the last 24 hours, and once a day the last 14 days, so later edits in Glooko arrive too.
 _Avoid_: import, sync, catch-up.
 
 **Range**:

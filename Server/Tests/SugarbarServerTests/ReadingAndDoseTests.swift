@@ -84,6 +84,30 @@ import Testing
             #expect(bad.status == .badRequest)
         }
     }
+
+    @Test func aDeletedDoseStaysAsATombstoneUntilItIsUploadedAgain() async throws {
+        let token = try await createAccount()
+        try await withServer { client in
+            func upload(_ dose: [String: JSONValue]) async throws {
+                _ = try await client.decode(Stored.self, .post, "/v1/doses", token: token, json: ["doses": [dose]])
+            }
+            func stored() async throws -> DosesReply.Item {
+                try #require(try await client.decode(DosesReply.self, .get, "/v1/doses?from=0&to=5000", token: token).doses.first)
+            }
+            let live: [String: JSONValue] = ["id": .string("bolus-2000"), "t": .int(2000), "payload": .object(["units": .int(4)])]
+            try await upload(live)
+            try await upload(["id": .string("bolus-2000"), "t": .int(2000), "payload": .object(["units": .int(4)]), "deleted": .bool(true)])
+
+            let tombstone = try await stored()
+            #expect(tombstone.deleted == true)
+            #expect(tombstone.payload == .object([:]))
+
+            try await upload(live)
+            let revived = try await stored()
+            #expect(revived.deleted == nil)
+            #expect(revived.payload == .object(["units": .int(4)]))
+        }
+    }
 }
 
 struct UntrendedReading: Encodable { let t: Int64; let v: Double }

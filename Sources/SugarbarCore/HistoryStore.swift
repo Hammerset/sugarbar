@@ -10,9 +10,13 @@ public protocol HistoryStore: AnyObject, Sendable {
     func delete(dose: InsulinDose)
     /// Every stored Dose, not reconciled: a superseded manual Dose is still here.
     func allDoses() -> [InsulinDose]
+    /// Doses deleted and not stored again since. Deletions recorded before they carried a time are left out.
+    func doseDeletions() -> [DoseDeletion]
     func earliestReadingDate() -> Date?
     func glookoCursor() -> Date?
     func setGlookoCursor(_ date: Date)
+    func lastGlookoReread() -> Date?
+    func setLastGlookoReread(_ date: Date)
     func glookoEchoes() -> Set<GlookoEcho>
     func setGlookoEchoes(_ echoes: Set<GlookoEcho>)
 }
@@ -22,6 +26,16 @@ public extension HistoryStore {
     func replace(_ old: InsulinDose, with new: InsulinDose) {
         delete(dose: old)
         append(doses: [new])
+    }
+
+    /// Glooko is the source of truth for its Doses: those stored in `interval` that `fetched` lacks were
+    /// deleted or changed in Glooko (a pen dose marked as priming drops out of its insulin series).
+    @discardableResult
+    func removeGlookoDoses(in interval: ClosedRange<Date>, missingFrom fetched: [InsulinDose]) -> [InsulinDose] {
+        let kept = Set(fetched.map(\.id))
+        let gone = allDoses().filter { !$0.isManual && interval.contains($0.timestamp) && !kept.contains($0.id) }
+        for dose in gone { delete(dose: dose) }
+        return gone
     }
 
     func recentManualDoses(now: Date, lookback: TimeInterval = 48 * 3600) -> [InsulinDose] {
@@ -44,8 +58,16 @@ func reconciledDoses(in interval: ClosedRange<Date>, echoes: Set<GlookoEcho>, ra
     return reconcileDoses(raw(widened), echoes: echoes).filter { interval.contains($0.timestamp) }
 }
 
+public struct DoseDeletion: Equatable, Sendable {
+    public let id: String
+    public let timestamp: Date
+
+    public var isManual: Bool { id.hasPrefix(manualDoseIdPrefix) }
+}
+
 struct DoseTombstone: Codable {
     let deletedDoseId: String
+    let timestamp: Date?
 }
 
 /// LibreLinkUp and Glooko stamp the same sensor Reading a few seconds apart.
@@ -88,6 +110,7 @@ public final class FileHistoryStore: HistoryStore, @unchecked Sendable {
     private let lock = NSLock()
     private var readingMonths: [MonthKey: [Reading]] = [:]
     private var doseMonths: [MonthKey: [String: InsulinDose]] = [:]
+    private var deletionMonths: [MonthKey: [String: Date]] = [:]
     private var echoes: Set<GlookoEcho>?
 
     public init(directory: URL = FileHistoryStore.defaultDirectory()) {
@@ -154,6 +177,7 @@ public final class FileHistoryStore: HistoryStore, @unchecked Sendable {
                 guard month[dose.id] != dose else { continue }
                 month[dose.id] = dose
                 doseMonths[key] = month
+                deletionMonths[key]?[dose.id] = nil
                 added[key, default: []].append(dose)
             }
             let encoder = JSONEncoder()
@@ -170,9 +194,10 @@ public final class FileHistoryStore: HistoryStore, @unchecked Sendable {
             let key = MonthKey(dose.timestamp)
             var month = loadedDoses(key)
             guard month.removeValue(forKey: dose.id) != nil,
-                  let line = try? JSONEncoder().encode(DoseTombstone(deletedDoseId: dose.id))
+                  let line = try? JSONEncoder().encode(DoseTombstone(deletedDoseId: dose.id, timestamp: dose.timestamp))
             else { return }
             doseMonths[key] = month
+            deletionMonths[key, default: [:]][dose.id] = dose.timestamp
             appendLines([String(decoding: line, as: UTF8.self)], to: dosesFile(key))
         }
     }
@@ -180,6 +205,16 @@ public final class FileHistoryStore: HistoryStore, @unchecked Sendable {
     public func allDoses() -> [InsulinDose] {
         lock.withLock {
             storedMonths(prefix: "doses-").flatMap { loadedDoses($0).values }.chronological()
+        }
+    }
+
+    public func doseDeletions() -> [DoseDeletion] {
+        lock.withLock {
+            storedMonths(prefix: "doses-").flatMap { key in
+                _ = loadedDoses(key)
+                return (deletionMonths[key] ?? [:]).map { DoseDeletion(id: $0.key, timestamp: $0.value) }
+            }
+            .sorted { ($0.timestamp, $0.id) < ($1.timestamp, $1.id) }
         }
     }
 
@@ -201,6 +236,20 @@ public final class FileHistoryStore: HistoryStore, @unchecked Sendable {
     }
 
     private var cursorFile: URL { directory.appending(path: "glooko-cursor") }
+
+    public func lastGlookoReread() -> Date? {
+        guard let text = try? String(contentsOf: rereadFile, encoding: .utf8),
+              let seconds = TimeInterval(text.trimmingCharacters(in: .whitespacesAndNewlines))
+        else { return nil }
+        return Date(timeIntervalSince1970: seconds)
+    }
+
+    public func setLastGlookoReread(_ date: Date) {
+        try? String(Int(date.timeIntervalSince1970)).write(to: rereadFile, atomically: true, encoding: .utf8)
+    }
+
+    private var rereadFile: URL { directory.appending(path: "glooko-reread") }
+
     public func glookoEchoes() -> Set<GlookoEcho> {
         lock.withLock { loadedEchoes() }
     }
@@ -255,15 +304,19 @@ public final class FileHistoryStore: HistoryStore, @unchecked Sendable {
         if let cached = doseMonths[key] { return cached }
         let decoder = JSONDecoder()
         var month: [String: InsulinDose] = [:]
+        var deletions: [String: Date] = [:]
         for line in lines(of: dosesFile(key)) {
             let data = Data(line.utf8)
             if let dose = try? decoder.decode(InsulinDose.self, from: data) {
                 month[dose.id] = dose
+                deletions[dose.id] = nil
             } else if let tombstone = try? decoder.decode(DoseTombstone.self, from: data) {
                 month[tombstone.deletedDoseId] = nil
+                deletions[tombstone.deletedDoseId] = tombstone.timestamp
             }
         }
         doseMonths[key] = month
+        deletionMonths[key] = deletions
         return month
     }
 
@@ -289,7 +342,9 @@ public final class InMemoryHistoryStore: HistoryStore, @unchecked Sendable {
     private let lock = NSLock()
     private var storedReadings: [Reading] = []
     private var storedDoses: [String: InsulinDose] = [:]
+    private var deletions: [String: Date] = [:]
     private var cursor: Date?
+    private var reread: Date?
     private var echoes: Set<GlookoEcho> = []
 
     public init() {}
@@ -305,7 +360,10 @@ public final class InMemoryHistoryStore: HistoryStore, @unchecked Sendable {
     }
 
     public func delete(dose: InsulinDose) {
-        lock.withLock { _ = storedDoses.removeValue(forKey: dose.id) }
+        lock.withLock {
+            guard storedDoses.removeValue(forKey: dose.id) != nil else { return }
+            deletions[dose.id] = dose.timestamp
+        }
     }
 
     @discardableResult
@@ -319,6 +377,7 @@ public final class InMemoryHistoryStore: HistoryStore, @unchecked Sendable {
             doses.filter { dose in
                 guard storedDoses[dose.id] != dose else { return false }
                 storedDoses[dose.id] = dose
+                deletions[dose.id] = nil
                 return true
             }.count
         }
@@ -328,10 +387,16 @@ public final class InMemoryHistoryStore: HistoryStore, @unchecked Sendable {
         lock.withLock { storedDoses.values.chronological() }
     }
 
+    public func doseDeletions() -> [DoseDeletion] {
+        lock.withLock { deletions.map { DoseDeletion(id: $0.key, timestamp: $0.value) }.sorted { ($0.timestamp, $0.id) < ($1.timestamp, $1.id) } }
+    }
+
     public func earliestReadingDate() -> Date? { lock.withLock { storedReadings.first?.timestamp } }
 
     public func glookoCursor() -> Date? { lock.withLock { cursor } }
     public func setGlookoCursor(_ date: Date) { lock.withLock { cursor = date } }
+    public func lastGlookoReread() -> Date? { lock.withLock { reread } }
+    public func setLastGlookoReread(_ date: Date) { lock.withLock { reread = date } }
     public func glookoEchoes() -> Set<GlookoEcho> { lock.withLock { echoes } }
     public func setGlookoEchoes(_ echoes: Set<GlookoEcho>) { lock.withLock { self.echoes = echoes } }
 }
