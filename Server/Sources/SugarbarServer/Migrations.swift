@@ -96,6 +96,9 @@ enum Migrations {
             """,
             "CREATE INDEX glooko_links_due ON glooko_links (account_id, next_attempt_at)",
         ]),
+        (3, [
+            "ALTER TABLE doses ADD COLUMN deleted boolean NOT NULL DEFAULT false",
+        ]),
     ]
 
     /// Applies pending migrations in one transaction; the advisory lock lets several

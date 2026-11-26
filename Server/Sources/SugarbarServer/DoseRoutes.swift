@@ -2,10 +2,22 @@ import Foundation
 import Hummingbird
 import PostgresNIO
 
+/// A deleted Dose is kept as a tombstone with an empty payload, so every device learns of the deletion
+/// and apps that predate tombstones skip it rather than store an empty Dose.
 struct Dose: Codable {
     let id: String
     let t: Int64
     let payload: JSONValue
+    let deleted: Bool?
+
+    init(id: String, t: Int64, payload: JSONValue, deleted: Bool) {
+        self.id = id
+        self.t = t
+        self.payload = deleted ? .object([:]) : payload
+        self.deleted = deleted ? true : nil
+    }
+
+    var isDeleted: Bool { deleted == true }
 }
 
 struct DosesUpload: Decodable { let doses: [Dose] }
@@ -22,15 +34,16 @@ enum Doses {
             latest[dose.id] = dose
         }
         guard !latest.isEmpty else { return StoredResponse(stored: 0) }
-        let doses = Array(latest.values)
+        let doses = latest.values.map { Dose(id: $0.id, t: $0.t, payload: $0.payload, deleted: $0.isDeleted) }
         let encoder = JSONEncoder()
         let payloads = try doses.map { String(decoding: try encoder.encode($0.payload), as: UTF8.self) }
         try await db.query(
             """
-            INSERT INTO doses (account_id, id, t, payload)
-            SELECT \(accountId), id, t, payload::jsonb
-            FROM unnest(\(doses.map(\.id))::text[], \(doses.map(\.t))::bigint[], \(payloads)::text[]) AS d(id, t, payload)
-            ON CONFLICT (account_id, id) DO UPDATE SET t = excluded.t, payload = excluded.payload
+            INSERT INTO doses (account_id, id, t, payload, deleted)
+            SELECT \(accountId), id, t, payload::jsonb, deleted
+            FROM unnest(\(doses.map(\.id))::text[], \(doses.map(\.t))::bigint[], \(payloads)::text[], \(doses.map(\.isDeleted))::boolean[])
+                AS d(id, t, payload, deleted)
+            ON CONFLICT (account_id, id) DO UPDATE SET t = excluded.t, payload = excluded.payload, deleted = excluded.deleted
             """,
             logger: context.logger
         )
@@ -43,7 +56,7 @@ enum Doses {
         let lowerBound = max(page.from, (page.after ?? Int64.min) &+ 1)
         let rows = try await db.query(
             """
-            SELECT id, t, payload::text FROM doses
+            SELECT id, t, payload::text, deleted FROM doses
             WHERE account_id = \(accountId) AND t >= \(lowerBound) AND t <= \(page.to)
             ORDER BY t, id
             LIMIT \(page.limit + 1)
@@ -52,8 +65,8 @@ enum Doses {
         )
         let decoder = JSONDecoder()
         var doses: [Dose] = []
-        for try await (id, t, payload) in rows.decode((String, Int64, String).self) {
-            doses.append(Dose(id: id, t: t, payload: try decoder.decode(JSONValue.self, from: Data(payload.utf8))))
+        for try await (id, t, payload, deleted) in rows.decode((String, Int64, String, Bool).self) {
+            doses.append(Dose(id: id, t: t, payload: try decoder.decode(JSONValue.self, from: Data(payload.utf8)), deleted: deleted))
         }
         var hasMore = doses.count > page.limit
         if hasMore {

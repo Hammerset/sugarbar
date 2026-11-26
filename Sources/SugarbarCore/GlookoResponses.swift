@@ -35,6 +35,8 @@ public let glookoInsulinSeries = ["gkInsulinBolus", "gkInsulinBasal"]
 public struct GlookoHistory: Equatable, Sendable {
     public let readings: [Reading]
     public let doses: [InsulinDose]
+    /// Both insulin series came back and every entry decoded, so a Dose missing here is gone from Glooko.
+    public let hasEveryDose: Bool
 }
 
 private struct GraphDataEnvelope: Decodable {
@@ -80,12 +82,16 @@ func glookoMgPerDl(_ value: Double) -> Double {
 
 public func decodeGlookoHistory(_ data: Data, timeZone: TimeZone = .current) throws -> GlookoHistory {
     let series = try JSONDecoder().decode(GraphDataEnvelope.self, from: data).series
-    let boluses = (series?.gkInsulinBolus ?? []).compactMap { $0.dose(kind: .bolus, timeZone: timeZone) }
-    let basals = (series?.gkInsulinBasal ?? []).compactMap { $0.dose(kind: .basal, timeZone: timeZone) }
+    let bolusEntries = series?.gkInsulinBolus ?? []
+    let basalEntries = series?.gkInsulinBasal ?? []
+    let boluses = bolusEntries.compactMap { $0.dose(kind: .bolus, timeZone: timeZone) }
+    let basals = basalEntries.compactMap { $0.dose(kind: .basal, timeZone: timeZone) }
     let cgm = (series?.cgmLow ?? []) + (series?.cgmNormal ?? []) + (series?.cgmHigh ?? [])
     return GlookoHistory(
         readings: cgm.compactMap { $0.reading(timeZone: timeZone) }.sorted { $0.timestamp < $1.timestamp },
-        doses: numberingSameTimeDoses(boluses + basals)
+        doses: numberingSameTimeDoses(boluses + basals),
+        hasEveryDose: series?.gkInsulinBolus != nil && series?.gkInsulinBasal != nil
+            && boluses.count == bolusEntries.count && basals.count == basalEntries.count
     )
 }
 

@@ -184,20 +184,31 @@ public struct WireReading: Codable, Equatable, Sendable {
 }
 
 /// The Dose JSON carries neither its id nor an epoch, so each one travels wrapped.
+/// A deleted Dose travels as a tombstone with an empty payload, which apps that predate it skip.
 public struct WireDose: Codable, Equatable, Sendable {
     public var id: String
     public var t: Int
     public var payload: JSONValue
+    public var deleted: Bool?
 
-    public init(id: String, t: Int, payload: JSONValue) {
+    public init(id: String, t: Int, payload: JSONValue, deleted: Bool? = nil) {
         self.id = id
         self.t = t
         self.payload = payload
+        self.deleted = deleted == true ? true : nil
     }
 
     init(_ dose: InsulinDose) throws {
-        self.init(id: dose.id, t: Int(dose.timestamp.timeIntervalSince1970.rounded(.down)), payload: try JSONValue(encoding: dose))
+        self.init(id: dose.id, t: Self.seconds(dose.timestamp), payload: try JSONValue(encoding: dose))
     }
+
+    init(deleted deletion: DoseDeletion) {
+        self.init(id: deletion.id, t: Self.seconds(deletion.timestamp), payload: .object([:]), deleted: true)
+    }
+
+    var isDeleted: Bool { deleted == true }
+
+    private static func seconds(_ date: Date) -> Int { Int(date.timeIntervalSince1970.rounded(.down)) }
 }
 
 public struct ReadingsBody: Codable, Equatable, Sendable {

@@ -395,6 +395,39 @@ import Testing
         #expect(server.recordCount == records)
     }
 
+    @Test func aGlookoDoseRemovedOnOneDeviceLeavesEveryDeviceAndComesBackIfGlookoReturnsIt() async throws {
+        let phone = device()
+        let mac = device()
+        let pen = { (units: Double, daysAgo: Double) in
+            InsulinDose(kind: .bolus, units: units, timestamp: clock.now.addingTimeInterval(-daysAgo * 86400), insulinName: nil, deviceName: "NovoPen 6")
+        }
+        let priming = pen(4, 10)
+        let kept = pen(2, 10.1)
+        phone.history.append(doses: [priming, kept])
+        try await phone.sync()
+        try await mac.sync()
+        #expect(mac.history.allDoses() == [kept, priming])
+
+        clock.advance(3600)
+        phone.history.removeGlookoDoses(in: priming.timestamp.addingTimeInterval(-60)...priming.timestamp.addingTimeInterval(60), missingFrom: [])
+        try await phone.sync()
+        // The Mac's month has changed too, so it would re-send it whole; the deletion must land first.
+        let later = pen(1, 9.9)
+        mac.history.append(doses: [later])
+        try await mac.sync()
+        try await phone.sync()
+
+        #expect(mac.history.allDoses() == [kept, later])
+        #expect(phone.history.allDoses() == [kept, later])
+        #expect(server.storedDoses.first { $0.id == priming.id }?.deleted == true)
+
+        clock.advance(3600)
+        mac.history.append(doses: [priming])
+        try await mac.sync()
+        try await phone.sync()
+        #expect(phone.history.allDoses() == [kept, priming, later])
+    }
+
     @Test func formatsAndParsesWireTimestampsToTheMillisecond() {
         let stamp: SyncStamp = 1_763_294_400_123
         #expect(SyncTimestamp.format(stamp) == "2025-11-16T12:00:00.123Z")

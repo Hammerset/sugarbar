@@ -124,8 +124,9 @@ public final class SyncEngine {
                 try await exchangeRecords(client)
             }
             try await uploadReadings(client)
-            try await uploadGlookoDoses(client)
+            // Downloading first lets a deletion from another device land before this one re-sends the month.
             try await downloadHistory(client)
+            try await uploadGlookoDoses(client)
             if state?.outbox.isEmpty == false { try await exchangeRecords(client) }
             state?.lastSync = now()
             state?.lastError = nil
@@ -343,35 +344,43 @@ public final class SyncEngine {
         }
     }
 
+    /// Sends each changed month whole, its deleted Glooko Doses as tombstones, so other devices drop them too.
     private func uploadGlookoDoses(_ client: SyncClient) async throws {
         let history = history
-        let doses = await Task.detached(operation: { history.allDoses().filter { !$0.isManual } }).value
+        let byMonth = await Task.detached(operation: { Self.glookoDoseMonths(history) }).value
         let oldBefore = Int(now().addingTimeInterval(-Self.doseDownloadOverlap).timeIntervalSince1970)
-        let byMonth = Dictionary(grouping: doses) { MonthKey($0.timestamp).description }
         for key in byMonth.keys.sorted() {
-            let wire = try byMonth[key]!.sorted { $0.id < $1.id }.map(WireDose.init)
+            let wire = byMonth[key]!
             let fingerprint = doseMonthFingerprint(wire)
             guard state?.dosesUploaded[key] != fingerprint else { continue }
             for start in stride(from: 0, to: wire.count, by: 1000) {
                 try await client.upload(doses: Array(wire[start..<min(start + 1000, wire.count)]))
             }
             state?.dosesUploaded[key] = fingerprint
-            announceUpload(of: wire.map(\.t).filter { $0 < oldBefore }, in: key)
+            announceUpload(of: wire.map(\.t).filter { $0 < oldBefore }, in: key, evenIfCovered: true)
             save()
         }
     }
 
+    private nonisolated static func glookoDoseMonths(_ history: HistoryStore) -> [String: [WireDose]] {
+        let live = history.allDoses().filter { !$0.isManual }.compactMap { try? WireDose($0) }
+        let deleted = history.doseDeletions().filter { !$0.isManual }.map(WireDose.init(deleted:))
+        return Dictionary(grouping: live + deleted) { MonthKey(Date(timeIntervalSince1970: TimeInterval($0.t))).description }
+            .mapValues { $0.sorted { $0.id < $1.id } }
+    }
+
     private func doseMonthFingerprint(_ wire: [WireDose]) -> String {
-        syncFingerprint(.array(wire.map { .array([.string($0.id), $0.payload]) }))
+        syncFingerprint(.array(wire.map { .array([.string($0.id), $0.isDeleted ? .bool(true) : $0.payload]) }))
     }
 
     /// Other devices only look back a little for new History, so uploading older data leaves a
     /// `historyUpload` record (one per device and month, its range growing) telling them to fetch it.
-    private func announceUpload(of times: [Int], in month: String) {
+    /// A re-sent Dose month may delete or change Doses already announced, so it is announced again.
+    private func announceUpload(of times: [Int], in month: String, evenIfCovered: Bool = false) {
         guard var state, let first = times.min(), let last = times.max() else { return }
         let previous = state.announced[month]
         let range = HistoryRange(from: min(first, previous?.from ?? first), to: max(last, previous?.to ?? last))
-        guard range != previous, let payload = try? JSONValue(encoding: range) else { return }
+        guard range != previous || evenIfCovered, let payload = try? JSONValue(encoding: range) else { return }
         state.announced[month] = range
         state.lastAnnouncement = max(SyncStamp(date: now()), state.lastAnnouncement + 1)
         state.enqueue(SyncChange(
@@ -428,8 +437,7 @@ public final class SyncEngine {
         var after: Int?
         while true {
             let page = try await client.doses(from: from, to: to, after: after)
-            let doses = page.doses.compactMap { try? $0.payload.decode(InsulinDose.self) }.filter { !$0.isManual }
-            changed = storeDownloaded(doses) || changed
+            changed = storeDownloaded(page.doses) || changed
             // `after` is exclusive on whole seconds, so step back one in case a page split a second.
             guard page.hasMore == true, let last = page.doses.last?.t, last - 1 > after ?? Int.min else { return changed }
             after = last - 1
@@ -454,16 +462,31 @@ public final class SyncEngine {
         return changed
     }
 
-    private func storeDownloaded(_ doses: [InsulinDose]) -> Bool {
-        guard !doses.isEmpty else { return false }
-        func monthFingerprints() -> [String: String] {
-            let all = history.allDoses().filter { !$0.isManual }
-            return Dictionary(grouping: all) { MonthKey($0.timestamp).description }
-                .compactMapValues { list in (try? list.sorted { $0.id < $1.id }.map(WireDose.init)).map(doseMonthFingerprint) }
+    /// A month changed here since its last upload is about to be sent whole, so it keeps its own copy of
+    /// every Dose it knows (live or deleted) and only gains new ones; a deletion from elsewhere still applies.
+    private func storeDownloaded(_ wire: [WireDose]) -> Bool {
+        guard !wire.isEmpty else { return false }
+        let beforeMonths = Self.glookoDoseMonths(history)
+        let before = beforeMonths.mapValues(doseMonthFingerprint)
+        let monthOf = { (dose: WireDose) in MonthKey(Date(timeIntervalSince1970: TimeInterval(dose.t))).description }
+        let isOwnedHere = { (dose: WireDose) -> Bool in
+            let key = monthOf(dose)
+            return before[key] != self.state?.dosesUploaded[key] && beforeMonths[key]?.contains { $0.id == dose.id } == true
         }
-        let before = monthFingerprints()
-        guard history.append(doses: doses) > 0 else { return false }
-        let after = monthFingerprints()
+        let doses = wire
+            .filter { !$0.isDeleted && !isOwnedHere($0) }
+            .compactMap { try? $0.payload.decode(InsulinDose.self) }
+            .filter { !$0.isManual }
+        let deletedIds = Set(wire.filter(\.isDeleted).map(\.id).filter { !$0.hasPrefix(manualDoseIdPrefix) })
+        var changed = history.append(doses: doses) > 0
+        if !deletedIds.isEmpty {
+            for dose in history.allDoses() where !dose.isManual && deletedIds.contains(dose.id) {
+                history.delete(dose: dose)
+                changed = true
+            }
+        }
+        guard changed else { return false }
+        let after = Self.glookoDoseMonths(history).mapValues(doseMonthFingerprint)
         for key in Set(before.keys).union(after.keys) where state?.dosesUploaded[key] == before[key] {
             state?.dosesUploaded[key] = after[key]
         }

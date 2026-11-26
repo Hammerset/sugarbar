@@ -71,7 +71,7 @@ public struct InsulinDose: Equatable, Sendable, Codable, Identifiable {
     /// A Glooko Dose is keyed by kind, time and its place among Doses sharing both, so a re-sync
     /// replaces it; a manual one keeps its identity across edits, and two entered in the same minute stay apart.
     public var id: String {
-        if origin == .manual, let entryId { return "manual-\(entryId.uuidString)" }
+        if origin == .manual, let entryId { return "\(manualDoseIdPrefix)\(entryId.uuidString)" }
         let key = "\(kind.rawValue)-\(timestamp.timeIntervalSince1970)"
         return occurrence.map { "\(key)#\($0)" } ?? key
     }
@@ -80,6 +80,8 @@ public struct InsulinDose: Equatable, Sendable, Codable, Identifiable {
 
     public var isFromPen: Bool { deviceName != nil }
 }
+
+let manualDoseIdPrefix = "manual-"
 
 /// Numbers Glooko Doses that share a kind and time, ordered by their content so the same Glooko
 /// response numbers them the same way every time. Glooko carries no record id.
