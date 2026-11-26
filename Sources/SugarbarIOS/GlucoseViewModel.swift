@@ -17,6 +17,7 @@ final class GlucoseViewModel {
     private(set) var meals: [Meal] = []
     private(set) var hasClaudeAPIKey: Bool
     private(set) var healthKitError: String?
+    private(set) var healthAccess: HealthAccess
     private(set) var forecast: Forecast?
     private(set) var settings: Settings
     private(set) var therapyEstimate: TherapyEstimate?
@@ -78,6 +79,7 @@ final class GlucoseViewModel {
         self.claudeKeyStore = claudeKeyStore
         self.mealAnalyzer = mealAnalyzer
         self.mealWriter = mealWriter
+        self.healthAccess = mealWriter.access
         self.reloadWidgets = reloadWidgets
         self.isSignedIn = (try? credentialStore.loadCredentials()) != nil
         self.isGlookoSignedIn = (try? glookoCredentialStore.loadCredentials()) != nil
@@ -113,6 +115,8 @@ final class GlucoseViewModel {
         guard !isMirroringMeals else { return }
         isMirroringMeals = true
         defer { isMirroringMeals = false }
+        // Undetermined or denied keeps the queue, so the Meals reach Health once access is granted.
+        guard await authorizeHealth() == .allowed else { return }
         for id in mealMirrorQueue.pending {
             let meal = mealStore.load().first { $0.id == id }
             do {
@@ -271,6 +275,7 @@ final class GlucoseViewModel {
         self.engine = engine
         Task { await engine.start() }
         sync.appBecameActive()
+        healthAccess = mealWriter.access
         if !mealMirrorQueue.pending.isEmpty { Task { await mirrorSyncedMeals() } }
     }
 
@@ -391,7 +396,7 @@ final class GlucoseViewModel {
         meals = mealStore.upsert(meal)
         refreshForecast()
         sync.localChangeHappened()
-        guard meal.isEaten else { return }
+        guard meal.isEaten, await authorizeHealth() == .allowed else { return }
         do {
             if wasEaten { try await mealWriter.delete(mealId: meal.id) }
             try await mealWriter.write(meal)
@@ -402,11 +407,18 @@ final class GlucoseViewModel {
         }
     }
 
+    @discardableResult
+    func authorizeHealth() async -> HealthAccess {
+        healthAccess = await mealWriter.authorize()
+        if healthAccess != .allowed { healthKitError = nil }
+        return healthAccess
+    }
+
     func deleteMeal(_ meal: Meal) async {
         meals = mealStore.delete(id: meal.id)
         refreshForecast()
         sync.localChangeHappened()
-        guard meal.isEaten else { return }
+        guard meal.isEaten, await authorizeHealth() == .allowed else { return }
         do {
             try await mealWriter.delete(mealId: meal.id)
             healthKitError = nil
