@@ -14,6 +14,8 @@ Both apps can also log **meals** from a photo, a text description, or both: Clau
 
 **Ask Claude** (both apps, opt-in with the same API key): a chat about your recent data. The app sends Claude (Opus 5.5) a compact summary of the last 14 days of History, Doses, Meals, thresholds and therapy settings, and you ask questions such as what happened after your last meal or when you tend to go low. Answers are observations and things to discuss with your care team; Claude may discuss dose amounts with reference to the app's dose calculation and your working ratio and sensitivity, and says how uncertain they are. See [Ask Claude](#ask-claude).
 
+**Copy for Claude** (both apps, no API key needed): copies a text snapshot of the range shown on the chart, ready to paste into a Claude chat (claude.ai or the Claude app) and ask for help estimating a dose. See [Copy for Claude](#copy-for-claude).
+
 Optionally, both apps **sync** Meals, Doses, Readings and settings through a small server you host yourself, so what you log on the phone shows on the Mac and the other way round. Off unless you set it up; each device keeps working offline. See [Sync](#sync).
 
 Both apps can optionally post **low/high alerts** as local notifications (off by default; see [Alerts](#alerts)).
@@ -150,6 +152,21 @@ Open it from **Ask Claude** on the iOS Trends screen or the Mac panel. It needs 
 - The summary goes in the system prompt, marked for prompt caching, and stays fixed for the conversation; each follow-up resends the conversation so far, with Claude's previous replies passed back unchanged. **Start Over** drops the conversation and rebuilds the summary on the next question.
 - The conversation lives in memory only. Nothing is stored off the device apart from the request to the Claude API.
 - Pen Doses only appear after an NFC sync and Meals only if logged; the summary and the prompt say so, so Claude can flag missing data.
+
+## Copy for Claude
+
+On the Mac, the clipboard button next to the range selector copies a snapshot of the selected range (4h…90d); right-click it, or use the gear menu, for **Copy for Claude with a Dose Question**, which puts a short request for a dose estimate and next-meal strategy first, with a line to fill in the meal. On the iPhone, the clipboard menu at the top left of the Trends screen copies either version or opens the share sheet, so it can go straight to the Claude app.
+
+The snapshot (`claudeSnapshot` in `SugarbarCore/ClaudeSnapshot.swift`) is Markdown-ish plain text in local time with the time zone stated:
+
+- **Now**: glucose with trend arrow, rate (mmol/L per min) and age; stale, LO/HI and sensor warm-up when they apply; the band thresholds.
+- **Glucose in view**: mean, lowest, highest and time in range, low episodes, then the Readings thinned by range: 5-minute means for 4h, 15-minute means up to 24h, hourly mean (lowest–highest) beyond that. Values below low are marked L, above high H. For views longer than 3 days, days before the last 3 calendar days collapse to one line each (glucose, lows, bolus, basal and carb totals), so a 90-day snapshot stays around 16 KB; a 4h one is about 2.5 KB (well under 1k tokens).
+- **Insulin in view**: every Dose with time, units, insulin and source (pen, typed into Glooko, or entered in sugarbar and not yet synced), totals and the last basal.
+- **Food in view**: every eaten Meal with carbs, fat/protein/energy, absorption and any dose plan still being taken; open Meal Plans listed apart and not counted.
+- **On board and Forecast**: Insulin on Board, Carbs on Board, the Forecast at +30/+60/+120 min with its uncertainty range, where it settles, predicted crossings, and the Forecast's 14-day accuracy when known.
+- **Therapy settings**: carb ratio, sensitivity, target, insulin peak and duration, absorption times, pen step and maximum dose, the app's dose formula, and pending learned Suggestions marked as not accepted.
+
+It states the units and that Doses only include pen injections after an NFC sync plus Doses entered in sugarbar. It carries no names, emails or account ids. Nothing is sent anywhere by the app; you decide what to paste.
 
 ## Sync
 

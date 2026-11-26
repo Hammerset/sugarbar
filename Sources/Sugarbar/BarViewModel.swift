@@ -222,6 +222,21 @@ final class BarViewModel {
         sync.localChangeHappened()
     }
 
+    func claudeSnapshot(window: HistoryWindow, includesQuestion: Bool = false) -> String {
+        SugarbarCore.claudeSnapshot(
+            history: historyStore,
+            meals: meals,
+            latest: latest,
+            sensorActivation: sensorActivation,
+            forecast: forecast,
+            forecastReview: forecastReview,
+            settings: settings,
+            suggestions: therapySuggestions,
+            window: window,
+            includesQuestion: includesQuestion
+        )
+    }
+
     func chartMeals(window: HistoryWindow) -> [Meal] {
         SugarbarCore.meals(meals, within: window, of: now)
     }

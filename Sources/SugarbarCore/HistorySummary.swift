@@ -365,35 +365,6 @@ private struct SummaryBuilder {
         return lines.joined(separator: "\n")
     }
 
-    private func doseSource(_ dose: InsulinDose) -> String {
-        let source = dose.isManual ? "entered in sugarbar, pen not yet synced" : dose.isFromPen ? "pen" : "typed into Glooko"
-        if let name = dose.insulinName, !name.isEmpty { return " (\(name), \(source))" }
-        return " (\(source))"
-    }
-
-    private func mealLabel(_ meal: Meal) -> String {
-        let summary = meal.summary
-            .components(separatedBy: .newlines)
-            .joined(separator: " ")
-            .trimmingCharacters(in: .whitespaces)
-        guard !summary.isEmpty else { return "" }
-        return " \"\(summary.count > 60 ? String(summary.prefix(57)) + "..." : summary)\""
-    }
-
-    private func macroDetail(_ meal: Meal) -> String {
-        var parts: [String] = []
-        if let estimate = meal.estimatedCarbsGrams, formatGrams(estimate) != formatGrams(meal.carbsGrams) {
-            parts.append("Claude estimated \(formatGrams(estimate)) g carbs")
-        }
-        if let macros = macroLine(fat: meal.fatGrams, protein: meal.proteinGrams, energy: meal.energyKcal, absorption: meal.absorption) {
-            parts.append(macros)
-        }
-        if meal.carbAbsorption != .normal {
-            parts.append("logged as \(meal.carbAbsorption.label.lowercased()) absorption")
-        }
-        return parts.isEmpty ? "" : " (" + parts.joined(separator: "; ") + ")"
-    }
-
     private func format(_ date: Date, _ pattern: String) -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
@@ -401,6 +372,35 @@ private struct SummaryBuilder {
         formatter.dateFormat = pattern
         return formatter.string(from: date)
     }
+}
+
+func doseSource(_ dose: InsulinDose) -> String {
+    let source = dose.isManual ? "entered in sugarbar, pen not yet synced" : dose.isFromPen ? "pen" : "typed into Glooko"
+    if let name = dose.insulinName, !name.isEmpty { return " (\(name), \(source))" }
+    return " (\(source))"
+}
+
+func mealLabel(_ meal: Meal) -> String {
+    let summary = meal.summary
+        .components(separatedBy: .newlines)
+        .joined(separator: " ")
+        .trimmingCharacters(in: .whitespaces)
+    guard !summary.isEmpty else { return "" }
+    return " \"\(summary.count > 60 ? String(summary.prefix(57)) + "..." : summary)\""
+}
+
+func macroDetail(_ meal: Meal) -> String {
+    var parts: [String] = []
+    if let estimate = meal.estimatedCarbsGrams, formatGrams(estimate) != formatGrams(meal.carbsGrams) {
+        parts.append("Claude estimated \(formatGrams(estimate)) g carbs")
+    }
+    if let macros = macroLine(fat: meal.fatGrams, protein: meal.proteinGrams, energy: meal.energyKcal, absorption: meal.absorption) {
+        parts.append(macros)
+    }
+    if meal.carbAbsorption != .normal {
+        parts.append("logged as \(meal.carbAbsorption.label.lowercased()) absorption")
+    }
+    return parts.isEmpty ? "" : " (" + parts.joined(separator: "; ") + ")"
 }
 
 private func quantile(_ sorted: [Double], _ q: Double) -> Double {
